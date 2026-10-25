@@ -15,7 +15,7 @@ new #[Layout('layouts::customer'), Title('Pesanan saya')] class extends Componen
     #[Computed]
     public function orders(): Collection
     {
-        return auth()->user()->orders()->with(['service', 'technician.user'])->latest()->get();
+        return auth()->user()->orders()->with(['service', 'technician.user', 'review'])->latest()->get();
     }
 }; ?>
 
@@ -42,7 +42,11 @@ new #[Layout('layouts::customer'), Title('Pesanan saya')] class extends Componen
                                 {{ $order->technician?->business_name ?? 'Belum ada teknisi' }} · {{ ($order->scheduled_date ?? $order->preferred_date)->translatedFormat('j M Y') }}
                             </p>
                         </div>
-                        <x-order.status-pill :status="$order->status" class="!text-xs" />
+                        @if ($order->status === \App\Enums\OrderStatus::Selesai && ! $order->review)
+                            <span class="rounded-full bg-sun-soft px-3 py-1 text-xs font-semibold text-sun-ink">Beri ulasan</span>
+                        @else
+                            <x-order.status-pill :status="$order->status" class="!text-xs" />
+                        @endif
                         <flux:icon.chevron-right class="hidden size-4 text-mute sm:block" />
                     </a>
                 @empty

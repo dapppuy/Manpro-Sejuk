@@ -25,6 +25,7 @@ Route::middleware(['auth', 'role:customer'])->group(function () {
     Route::livewire('pesan/{technician}', 'pages::requests.create')->name('requests.create');
     Route::livewire('pesanan', 'pages::orders.index')->name('orders.index');
     Route::livewire('pesanan/{order}', 'pages::orders.show')->name('orders.show');
+    Route::livewire('pesanan/{order}/ulasan', 'pages::reviews.create')->name('reviews.create');
 });
 
 Route::prefix('mitra')->name('mitra.')->group(function () {

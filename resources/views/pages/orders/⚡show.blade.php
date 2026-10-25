@@ -196,7 +196,7 @@ new #[Layout('layouts::customer')] class extends Component {
 
     public function render(): \Illuminate\Contracts\View\View
     {
-        $this->order->loadMissing(['technician.user', 'service', 'media', 'offers', 'costItems', 'payments', 'workProofs']);
+        $this->order->loadMissing(['technician.user', 'service', 'media', 'offers', 'costItems', 'payments', 'workProofs', 'review']);
 
         return $this->view()->title('Pesanan #'.$this->order->code);
     }
@@ -552,10 +552,25 @@ new #[Layout('layouts::customer')] class extends Component {
                                 </dl>
                             @endif
                         </div>
+                        @if ($order->review)
+                            <div class="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-sun-soft/60 px-5 py-4">
+                                <div>
+                                    <p class="text-sm font-bold">Ulasanmu</p>
+                                    @if ($order->review->comment)
+                                        <p class="mt-0.5 text-sm text-ink-soft">“{{ str($order->review->comment)->limit(120) }}”</p>
+                                    @endif
+                                </div>
+                                <span class="flex gap-0.5" aria-label="Rating {{ $order->review->rating }} dari 5">
+                                    @foreach (range(1, 5) as $star)
+                                        <flux:icon.star wire:key="mine-{{ $star }}" @class(['size-5', 'fill-sun text-sun' => $star <= $order->review->rating, 'text-line' => $star > $order->review->rating]) />
+                                    @endforeach
+                                </span>
+                            </div>
+                        @endif
                         <div class="mt-8 grid gap-3 sm:grid-cols-2">
-                            @if (Route::has('reviews.create'))
+                            @unless ($order->review)
                                 <x-button size="lg" icon="star" :href="route('reviews.create', $order)" wire:navigate>Beri ulasan</x-button>
-                            @endif
+                            @endunless
                             <x-button size="lg" variant="secondary" icon-trailing="arrow-right" :href="route('home')" wire:navigate>Ke beranda</x-button>
                         </div>
                     </x-order.panel>
