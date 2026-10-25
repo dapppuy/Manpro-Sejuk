@@ -12,7 +12,7 @@
     <label for="{{ $id }}" class="text-sm font-semibold">
         {{ $label }}@if ($required)<span class="ml-0.5 text-coral">*</span>@endif
     </label>
-    <select id="{{ $id }}" {{ $attributes->except(['class', 'id'])->class([
+    <select id="{{ $id }}" name="{{ $name }}" @required($required) {{ $attributes->except(['class', 'id'])->class([
         'mt-2 h-12 w-full rounded-xl bg-white px-4 text-sm ring-1 ring-inset outline-none focus:ring-ice disabled:bg-paper',
         'ring-coral/60' => $errors->has($name),
         'ring-line' => ! $errors->has($name),

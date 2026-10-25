@@ -1,0 +1,355 @@
+<?php
+
+use App\Enums\OfferStatus;
+use App\Enums\OrderStatus;
+use App\Exceptions\InvalidOrderTransition;
+use App\Models\Order;
+use App\Models\TechnicianProfile;
+use App\Services\OrderWorkflow;
+use Flux\Flux;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Gate;
+use Livewire\Attributes\Computed;
+use Livewire\Attributes\Layout;
+use Livewire\Component;
+
+new #[Layout('layouts::customer')] class extends Component {
+    public Order $order;
+
+    public function mount(Order $order): void
+    {
+        Gate::authorize('manage', $order);
+
+        $this->order = $order;
+        $this->expireIfOverdue();
+    }
+
+    /**
+     * Pick up changes made by the technician or the scheduler while the page is open.
+     */
+    public function refreshOrder(): void
+    {
+        $this->order->refresh();
+        $this->expireIfOverdue();
+        unset($this->backupCandidates);
+    }
+
+    public function requestBackup(OrderWorkflow $workflow): void
+    {
+        $this->runAction(fn () => $workflow->releaseToBackup($this->order, OfferStatus::Kedaluwarsa, auth()->user(), 'Pelanggan memilih teknisi cadangan'));
+    }
+
+    public function chooseBackup(int $technicianId, OrderWorkflow $workflow): void
+    {
+        $technician = $this->backupCandidates->firstWhere('id', $technicianId);
+
+        if (! $technician instanceof TechnicianProfile) {
+            Flux::toast(variant: 'danger', text: 'Teknisi ini sudah tidak tersedia. Pilih yang lain.');
+            unset($this->backupCandidates);
+
+            return;
+        }
+
+        $this->runAction(fn () => $workflow->reassign($this->order, $technician, auth()->user()));
+    }
+
+    public function approveEstimate(OrderWorkflow $workflow): void
+    {
+        $this->runAction(fn () => $workflow->approveEstimate($this->order, auth()->user()));
+    }
+
+    public function rejectEstimate(OrderWorkflow $workflow): void
+    {
+        $businessName = $this->order->technician?->business_name;
+
+        $this->runAction(fn () => $workflow->rejectEstimate($this->order, auth()->user()));
+
+        if ($this->order->status === OrderStatus::CariCadangan) {
+            session([
+                'sejuk.hidden_technicians' => $this->order->offers()->pluck('technician_id')->all(),
+                'sejuk.pending_order' => $this->order->code,
+            ]);
+            session()->flash('sejuk.rejected_notice', "Estimasi dari {$businessName} ditolak. Pilih teknisi lain, formulirmu tetap tersimpan.");
+
+            $this->redirectRoute('search', ['layanan' => $this->order->service->slug], navigate: true);
+        }
+    }
+
+    public function findOtherTechnician(): void
+    {
+        session([
+            'sejuk.hidden_technicians' => $this->order->offers()->pluck('technician_id')->all(),
+            'sejuk.pending_order' => $this->order->code,
+        ]);
+
+        $this->redirectRoute('search', ['layanan' => $this->order->service->slug], navigate: true);
+    }
+
+    public function cancel(OrderWorkflow $workflow): void
+    {
+        $this->runAction(fn () => $workflow->cancelByCustomer($this->order, auth()->user()));
+    }
+
+    /**
+     * @return Collection<int, TechnicianProfile>
+     */
+    #[Computed]
+    public function backupCandidates(): Collection
+    {
+        if ($this->order->status !== OrderStatus::CariCadangan) {
+            return new Collection;
+        }
+
+        return app(OrderWorkflow::class)->backupCandidates($this->order);
+    }
+
+    public function render(): \Illuminate\Contracts\View\View
+    {
+        $this->order->loadMissing(['technician.user', 'service', 'media', 'offers']);
+
+        return $this->view()->title('Pesanan #'.$this->order->code);
+    }
+
+    private function runAction(Closure $action): void
+    {
+        try {
+            $action();
+        } catch (InvalidOrderTransition $exception) {
+            Flux::toast(variant: 'danger', text: $exception->getMessage());
+        }
+
+        $this->refreshOrder();
+    }
+
+    private function expireIfOverdue(): void
+    {
+        if (app(OrderWorkflow::class)->expireIfOverdue($this->order)) {
+            $this->order->refresh();
+        }
+    }
+}; ?>
+
+@php
+    $order = $this->order;
+    $technician = $order->technician;
+    $status = $order->status;
+    $firstName = str($technician?->user->name)->before(' ');
+    $scheduleDate = $order->scheduled_date ?? $order->preferred_date;
+    $scheduleWindow = $order->scheduled_window ?? $order->time_window;
+    $declined = $order->offers->firstWhere(fn ($offer) => $offer->technician_id === $order->technician_id && $offer->status === OfferStatus::Ditolak);
+    $expired = $order->offers->firstWhere(fn ($offer) => $offer->technician_id === $order->technician_id && $offer->status === OfferStatus::Kedaluwarsa);
+@endphp
+
+<div class="mx-auto max-w-7xl px-4 py-8 sm:px-6"
+    @if (in_array($status, [OrderStatus::MenungguRespons, OrderStatus::EstimasiMasuk, OrderStatus::Terjadwal], true)) wire:poll.10s="refreshOrder" @endif>
+    <div class="flex flex-wrap items-end justify-between gap-4">
+        <div>
+            <p class="text-sm text-mute tnum">Pesanan #{{ $order->code }}</p>
+            <h1 class="mt-1 text-3xl font-extrabold tracking-tight">{{ $order->service->name }}</h1>
+        </div>
+        <x-order.status-pill :status="$status" />
+    </div>
+
+    @if ($status !== OrderStatus::Dibatalkan)
+        <x-order.progress :status="$status" class="mt-8" />
+    @endif
+
+    <div class="mt-8 grid gap-8 lg:grid-cols-[1fr_340px]">
+        <div wire:key="stage-{{ $status->value }}" class="rise min-w-0 space-y-4">
+            @switch($status)
+                @case(OrderStatus::MenungguRespons)
+                    <x-order.panel icon="hourglass" :title="'Menunggu respons '.$firstName" sub="Kami memberi teknisi waktu maksimal {{ config('sejuk.response_minutes') }} menit untuk menanggapi permintaanmu.">
+                        <div class="mt-6 grid gap-3 sm:grid-cols-3"
+                            x-data="{ left: {{ $order->secondsToRespond() }}, done: false, tick() { if (this.left > 0) { this.left--; } else if (! this.done) { this.done = true; $wire.refreshOrder() } } }"
+                            x-init="setInterval(() => tick(), 1000)">
+                            <div class="rounded-2xl bg-paper p-4">
+                                <p class="font-bold tnum">{{ ($order->pendingOffer()?->created_at ?? $order->created_at)?->format('H.i') }}</p>
+                                <p class="mt-1 text-xs text-mute">Permintaan terkirim</p>
+                            </div>
+                            <div class="rounded-2xl bg-paper p-4">
+                                <p class="font-bold tnum" x-text="String(Math.floor(left / 60)).padStart(2, '0') + ':' + String(left % 60).padStart(2, '0')">--:--</p>
+                                <p class="mt-1 text-xs text-mute">Sisa waktu respons</p>
+                            </div>
+                            <div class="rounded-2xl bg-paper p-4">
+                                <p class="font-bold">Otomatis</p>
+                                <p class="mt-1 text-xs text-mute">Teknisi cadangan</p>
+                            </div>
+                        </div>
+                        <div class="mt-7 flex flex-wrap gap-3">
+                            <x-button variant="secondary" icon="search" wire:click="requestBackup" wire:confirm="Berhenti menunggu {{ $firstName }} dan pilih teknisi cadangan?">
+                                Cari teknisi cadangan sekarang
+                            </x-button>
+                        </div>
+                    </x-order.panel>
+                    <div class="rounded-2xl bg-frost p-5 text-sm ring-1 ring-ice/20">
+                        <p class="font-bold text-ice-deep">Respons Cepat & Teknisi Cadangan</p>
+                        <p class="mt-1 text-ink-soft">Jika teknisi awal tidak merespons, detail pesananmu tetap tersimpan dan bisa langsung dikirim ke teknisi lain tanpa mengisi formulir ulang.</p>
+                    </div>
+                    @break
+
+                @case(OrderStatus::CariCadangan)
+                    <x-order.panel icon="search" title="Teknisi cadangan siap membantu" sub="Pilih teknisi lain yang tersedia. Detail permintaan dan jadwalmu tidak berubah.">
+                        @if ($declined || $expired)
+                            <p class="mt-5 rounded-2xl bg-sun-soft px-4 py-3 text-sm text-sun-ink">
+                                {{ $technician?->business_name }} {{ $declined ? 'tidak bisa mengambil pesanan ini.' : 'belum merespons dalam '.config('sejuk.response_minutes').' menit.' }}
+                            </p>
+                        @endif
+                        <div class="mt-6 space-y-3">
+                            @forelse ($this->backupCandidates as $candidate)
+                                <div wire:key="backup-{{ $candidate->id }}" class="flex flex-wrap items-center gap-4 rounded-2xl bg-paper p-4 ring-1 ring-line">
+                                    <x-avatar :name="$candidate->user->name" :src="$candidate->user->avatarUrl()" class="!size-14 rounded-xl" />
+                                    <div class="min-w-0 flex-1">
+                                        <p class="font-bold">{{ $candidate->business_name }}</p>
+                                        <div class="mt-1 flex flex-wrap items-center gap-2">
+                                            <x-rating :value="$candidate->rating_avg" />
+                                            <span class="text-xs text-mute tnum">{{ number_format((float) $candidate->distanceKm, 1, ',', '.') }} km</span>
+                                            <span @class(['text-xs font-semibold', 'text-leaf' => $candidate->isAvailableToday(), 'text-mute' => ! $candidate->isAvailableToday()])>
+                                                {{ $candidate->isAvailableToday() ? 'Tersedia hari ini' : 'Jadwal berikutnya' }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <x-button size="sm" wire:click="chooseBackup({{ $candidate->id }})" wire:loading.attr="disabled">Pilih teknisi</x-button>
+                                </div>
+                            @empty
+                                <p class="rounded-2xl bg-paper px-4 py-5 text-sm text-mute">Belum ada teknisi cadangan di sekitarmu untuk layanan ini.</p>
+                            @endforelse
+                        </div>
+                        <button type="button" wire:click="findOtherTechnician" class="mt-5 text-sm font-semibold text-ice hover:text-ice-deep">Cari dari semua teknisi →</button>
+                    </x-order.panel>
+                    @break
+
+                @case(OrderStatus::EstimasiMasuk)
+                    <x-order.panel icon="circle-check" title="Estimasi sudah masuk" sub="Berdasarkan formulirmu dan daftar harga acuan teknisi.">
+                        <div class="mt-6 rounded-2xl bg-ink p-5 text-white sm:p-6">
+                            <p class="text-sm text-white/60">Kisaran biaya</p>
+                            <p class="mt-1 text-3xl font-extrabold tracking-tight tnum sm:text-4xl">
+                                {{ rupiah($order->estimate_min) }} <span class="text-white/40">–</span> {{ rupiah($order->estimate_max) }}
+                            </p>
+                            <p class="mt-3 text-sm text-white/60">Biaya final dipastikan setelah pemeriksaan di lokasi. Kalau berubah, pekerjaan menunggu persetujuanmu.</p>
+                        </div>
+                        <dl class="mt-5 grid gap-3 sm:grid-cols-2">
+                            <div class="rounded-2xl bg-paper p-4">
+                                <dt class="flex items-center gap-1.5 text-xs text-mute"><flux:icon.clock class="size-3.5" /> Jadwal kedatangan</dt>
+                                <dd class="mt-1 font-bold">{{ $scheduleDate->translatedFormat('l, j F') }}, {{ $scheduleWindow->range() }} WIB</dd>
+                            </div>
+                            @if ($order->estimate_note)
+                                <div class="rounded-2xl bg-paper p-4">
+                                    <dt class="text-xs text-mute">Catatan teknisi</dt>
+                                    <dd class="mt-1 text-sm text-ink-soft">{{ $order->estimate_note }}</dd>
+                                </div>
+                            @endif
+                        </dl>
+                        <div class="mt-8 flex flex-wrap gap-3">
+                            <x-button size="lg" wire:click="approveEstimate" wire:loading.attr="disabled">Setujui estimasi</x-button>
+                            <x-button size="lg" variant="secondary" wire:click="rejectEstimate" wire:confirm="Tolak estimasi ini dan cari teknisi lain? Formulirmu tetap tersimpan.">Tolak, cari teknisi lain</x-button>
+                        </div>
+                    </x-order.panel>
+                    @break
+
+                @case(OrderStatus::Terjadwal)
+                    <x-order.panel tone="frost" icon="calendar-check" title="Pesanan terjadwal" :sub="$technician?->user->name.' akan datang sesuai jadwal di bawah.'">
+                        <div class="mt-6 grid gap-4 sm:grid-cols-2">
+                            <div class="rounded-2xl bg-white p-5 ring-1 ring-ice/15">
+                                <p class="flex items-center gap-1.5 text-xs text-mute"><flux:icon.clock class="size-3.5" /> Kedatangan</p>
+                                <p class="mt-1 text-lg font-bold">{{ $scheduleDate->translatedFormat('l, j F') }}</p>
+                                <p class="text-2xl font-extrabold tnum sm:text-3xl">{{ $scheduleWindow->range() }} WIB</p>
+                            </div>
+                            <div class="rounded-2xl bg-white p-5 ring-1 ring-ice/15">
+                                <p class="flex items-center gap-1.5 text-xs text-mute"><flux:icon.map-pin class="size-3.5" /> Lokasi</p>
+                                <p class="mt-1 font-bold">{{ $order->address }}</p>
+                                <p class="text-ink-soft">{{ $order->address_detail ?: 'Tanpa detail tambahan' }}</p>
+                            </div>
+                        </div>
+                        <p class="mt-5 flex items-start gap-2 text-sm text-ink-soft">
+                            <flux:icon.bell-ring class="mt-0.5 size-4 shrink-0 text-ice" />
+                            Pengingat dikirim sehari sebelum dan 1 jam sebelum teknisi datang. Status diperbarui di halaman ini.
+                        </p>
+                    </x-order.panel>
+                    <x-order.panel>
+                        <p class="font-bold">Langkah berikutnya</p>
+                        <p class="mt-1 text-sm text-ink-soft">Setelah memeriksa AC di lokasi, teknisi mengirim rincian biaya final. Pekerjaan baru dimulai setelah kamu menyetujuinya.</p>
+                    </x-order.panel>
+                    @break
+
+                @case(OrderStatus::Dibatalkan)
+                    <x-order.panel icon="circle-x" icon-class="text-ink-soft" title="Pesanan dibatalkan" sub="Pesanan dibatalkan sebelum teknisi berangkat, tanpa biaya apa pun.">
+                        <div class="mt-5 flex items-center justify-between rounded-2xl bg-paper px-5 py-4 text-sm">
+                            <span>Biaya pembatalan</span>
+                            <span class="font-bold tnum">Rp0</span>
+                        </div>
+                        <div class="mt-8 flex flex-wrap gap-3">
+                            <x-button size="lg" :href="route('search', ['layanan' => $order->service->slug])" wire:navigate>Cari teknisi lain</x-button>
+                            <x-button size="lg" variant="secondary" :href="route('home')" wire:navigate>Ke beranda</x-button>
+                        </div>
+                    </x-order.panel>
+                    @break
+
+                @default
+                    <x-order.panel icon="info" :title="$status->label()" sub="Tahap ini sedang disiapkan." />
+            @endswitch
+        </div>
+
+        <aside class="h-fit space-y-4 lg:sticky lg:top-24">
+            @if ($technician)
+                <x-card class="p-5">
+                    <p class="text-xs font-semibold tracking-wider text-mute uppercase">Teknisi</p>
+                    <div class="mt-3 flex items-center gap-3">
+                        <x-avatar :name="$technician->user->name" :src="$technician->user->avatarUrl()" class="!size-14 rounded-xl" />
+                        <div class="min-w-0">
+                            <a href="{{ route('technicians.show', $technician) }}" wire:navigate class="font-bold hover:text-ice">{{ $technician->business_name }}</a>
+                            <div class="mt-1 flex flex-wrap items-center gap-2">
+                                <x-badge-chip :badge="$technician->badge" />
+                                <x-rating :value="$technician->rating_avg" />
+                            </div>
+                        </div>
+                    </div>
+                    @if ($status === OrderStatus::Terjadwal && $technician->user->phone)
+                        <x-button variant="secondary" size="sm" icon="message-circle" class="mt-4 w-full" :href="'https://wa.me/62'.substr($technician->user->phone, 1)" target="_blank" rel="noopener">
+                            Hubungi via WhatsApp
+                        </x-button>
+                    @endif
+                </x-card>
+            @endif
+
+            <x-card class="p-5 text-sm">
+                <p class="text-xs font-semibold tracking-wider text-mute uppercase">Detail permintaan</p>
+                <dl class="mt-3 space-y-2.5">
+                    @foreach (array_filter([
+                        'AC' => $order->brandLabel().' · '.$order->ac_capacity->label(),
+                        'Lokasi' => $order->fullAddress(),
+                        'Jadwal' => $scheduleDate->translatedFormat('l, j F').', '.($order->scheduled_window ? $scheduleWindow->range().' WIB' : str($scheduleWindow->label())->lower()),
+                        'Estimasi' => $order->estimate_min ? rupiah($order->estimate_min).' – '.rupiah($order->estimate_max) : null,
+                        'Garansi' => $order->warranty ? config('sejuk.warranty.days').' hari' : null,
+                    ]) as $label => $value)
+                        <div wire:key="row-{{ $loop->index }}" class="flex justify-between gap-4">
+                            <dt class="shrink-0 text-mute">{{ $label }}</dt>
+                            <dd class="text-right font-medium tnum">{{ $value }}</dd>
+                        </div>
+                    @endforeach
+                </dl>
+                @if ($order->notes)
+                    <p class="mt-3 rounded-xl bg-paper px-3 py-2 text-xs text-ink-soft">“{{ $order->notes }}”</p>
+                @endif
+                @if ($order->media->isNotEmpty())
+                    <div class="mt-4 flex flex-wrap gap-2">
+                        @foreach ($order->media as $media)
+                            <a wire:key="m-{{ $media->id }}" href="{{ $media->url() }}" target="_blank">
+                                @if ($media->type->value === 'video')
+                                    <span class="grid size-12 place-items-center rounded-lg bg-ink text-[10px] text-white">Video</span>
+                                @else
+                                    <img src="{{ $media->url() }}" alt="Foto kerusakan" class="size-12 rounded-lg object-cover" />
+                                @endif
+                            </a>
+                        @endforeach
+                    </div>
+                @endif
+            </x-card>
+
+            @if ($status->isCancellableByCustomer())
+                <button type="button" wire:click="cancel" wire:confirm="Batalkan pesanan ini? Tidak ada biaya pembatalan." class="w-full rounded-full py-2.5 text-sm font-semibold text-coral hover:bg-coral-soft">
+                    Batalkan pesanan · gratis
+                </button>
+            @endif
+        </aside>
+    </div>
+</div>

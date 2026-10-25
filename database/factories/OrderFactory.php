@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Enums\AcCapacity;
+use App\Enums\OfferStatus;
 use App\Enums\OrderStatus;
 use App\Enums\TimeWindow;
 use App\Models\Order;
@@ -39,6 +40,30 @@ class OrderFactory extends Factory
             'status' => OrderStatus::MenungguRespons,
             'response_deadline' => now()->addMinutes((int) config('sejuk.response_minutes')),
         ];
+    }
+
+    /**
+     * Record the offer to the assigned technician, as a real request would.
+     */
+    public function offered(OfferStatus $status = OfferStatus::Menunggu): static
+    {
+        return $this->afterCreating(function (Order $order) use ($status) {
+            if ($order->technician_id !== null) {
+                $order->offers()->create(['technician_id' => $order->technician_id, 'status' => $status]);
+            }
+        });
+    }
+
+    public function withEstimate(int $minimum = 100000, int $maximum = 150000): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => OrderStatus::EstimasiMasuk,
+            'estimate_min' => $minimum,
+            'estimate_max' => $maximum,
+            'scheduled_date' => now()->addDay()->toDateString(),
+            'scheduled_window' => TimeWindow::Pagi,
+            'response_deadline' => null,
+        ])->offered(OfferStatus::Diterima);
     }
 
     public function status(OrderStatus $status): static

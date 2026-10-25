@@ -236,6 +236,42 @@ class TechnicianProfile extends Model
     }
 
     /**
+     * @return HasMany<Order, $this>
+     */
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class, 'technician_id');
+    }
+
+    /**
+     * @return HasMany<OrderOffer, $this>
+     */
+    public function offers(): HasMany
+    {
+        return $this->hasMany(OrderOffer::class, 'technician_id');
+    }
+
+    /**
+     * Suggested estimate range for an order, from this technician's reference prices.
+     * Larger units (1,5 PK and up) use the second price row when one exists.
+     *
+     * @return array{min: int, max: int}|null
+     */
+    public function suggestedEstimate(Order $order): ?array
+    {
+        $rows = $this->prices->where('service_id', $order->service_id)->sortBy('price_min')->values();
+
+        if ($rows->isEmpty()) {
+            return null;
+        }
+
+        $isLarge = in_array($order->ac_capacity->value, ['1.5', '2'], true);
+        $row = $isLarge && $rows->count() > 1 ? $rows[1] : $rows[0];
+
+        return ['min' => $row->price_min, 'max' => $row->price_max];
+    }
+
+    /**
      * @return HasMany<TechnicianDocument, $this>
      */
     public function documents(): HasMany

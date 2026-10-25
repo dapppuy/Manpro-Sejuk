@@ -56,7 +56,11 @@ new #[Layout('layouts::customer')] class extends Component {
     public function requestUrl(): string
     {
         return Route::has('requests.create')
-            ? route('requests.create', array_filter(['technician' => $this->technician, 'layanan' => $this->service ?: null]))
+            ? route('requests.create', array_filter([
+                'technician' => $this->technician,
+                'layanan' => $this->service ?: null,
+                'pesanan' => session('sejuk.pending_order'),
+            ]))
             : route('login');
     }
 

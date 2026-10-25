@@ -1,8 +1,9 @@
 @php
     $profile = auth()->user()?->technicianProfile;
+    $incomingCount = $profile?->orders()->where('status', \App\Enums\OrderStatus::MenungguRespons)->count() ?? 0;
     $items = collect([
         ['label' => 'Dashboard', 'route' => 'mitra.dashboard', 'icon' => 'layout-dashboard'],
-        ['label' => 'Pesanan', 'route' => 'mitra.orders.index', 'active' => 'mitra.orders.*', 'icon' => 'clipboard-list'],
+        ['label' => 'Pesanan', 'route' => 'mitra.orders.index', 'active' => 'mitra.orders.*', 'icon' => 'clipboard-list', 'count' => $incomingCount],
         ['label' => 'Harga acuan', 'route' => 'mitra.prices', 'icon' => 'tag'],
         ['label' => 'Jadwal', 'route' => 'mitra.schedule', 'icon' => 'calendar-days'],
         ['label' => 'Galeri kerja', 'route' => 'mitra.gallery', 'icon' => 'images'],

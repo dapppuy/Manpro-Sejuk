@@ -21,13 +21,13 @@ enum OrderStatus: string
     {
         return match ($this) {
             self::MenungguRespons => 'Menunggu respons',
-            self::CariCadangan => 'Pilih teknisi cadangan',
+            self::CariCadangan => 'Mencari cadangan',
             self::EstimasiMasuk => 'Estimasi masuk',
             self::Terjadwal => 'Terjadwal',
-            self::MenungguPersetujuanBiaya => 'Menunggu persetujuan biaya',
+            self::MenungguPersetujuanBiaya => 'Perlu persetujuan',
             self::MenungguPembayaran => 'Menunggu pembayaran',
             self::Dikerjakan => 'Sedang dikerjakan',
-            self::MenungguKonfirmasi => 'Menunggu konfirmasi',
+            self::MenungguKonfirmasi => 'Menunggu konfirmasimu',
             self::PerbaikanUlang => 'Perbaikan ulang',
             self::Sengketa => 'Ditinjau admin',
             self::Selesai => 'Selesai',
@@ -41,9 +41,9 @@ enum OrderStatus: string
     public function tone(): string
     {
         return match ($this) {
-            self::MenungguRespons, self::CariCadangan, self::MenungguPersetujuanBiaya, self::MenungguPembayaran, self::MenungguKonfirmasi => 'sun',
-            self::EstimasiMasuk, self::Terjadwal, self::Dikerjakan => 'ice',
-            self::PerbaikanUlang, self::Sengketa, self::Dibatalkan => 'coral',
+            self::MenungguRespons, self::MenungguPersetujuanBiaya, self::MenungguPembayaran, self::MenungguKonfirmasi, self::PerbaikanUlang => 'sun',
+            self::CariCadangan, self::EstimasiMasuk, self::Terjadwal, self::Dikerjakan => 'ice',
+            self::Sengketa, self::Dibatalkan => 'coral',
             self::Selesai => 'leaf',
         };
     }

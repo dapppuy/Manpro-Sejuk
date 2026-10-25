@@ -4,12 +4,14 @@ namespace App\Models;
 
 use App\Enums\AcCapacity;
 use App\Enums\FundStatus;
+use App\Enums\OfferStatus;
 use App\Enums\OrderStatus;
 use App\Enums\TimeWindow;
 use Database\Factories\OrderFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -53,6 +55,8 @@ use Illuminate\Support\Carbon;
  * @property-read User $customer
  * @property-read TechnicianProfile|null $technician
  * @property-read Service $service
+ * @property-read Collection<int, OrderOffer> $offers
+ * @property-read Collection<int, OrderMedia> $media
  */
 #[Fillable([
     'customer_id', 'technician_id', 'service_id', 'ac_capacity', 'ac_brand', 'ac_brand_other', 'address',
@@ -151,5 +155,53 @@ class Order extends Model
     public function statusLogs(): HasMany
     {
         return $this->hasMany(OrderStatusLog::class);
+    }
+
+    /**
+     * @return HasMany<OrderOffer, $this>
+     */
+    public function offers(): HasMany
+    {
+        return $this->hasMany(OrderOffer::class);
+    }
+
+    /**
+     * @return HasMany<OrderMedia, $this>
+     */
+    public function media(): HasMany
+    {
+        return $this->hasMany(OrderMedia::class);
+    }
+
+    /**
+     * The offer currently waiting on the assigned technician, if any.
+     */
+    public function pendingOffer(): ?OrderOffer
+    {
+        return $this->offers
+            ->where('technician_id', $this->technician_id)
+            ->firstWhere('status', OfferStatus::Menunggu);
+    }
+
+    /**
+     * Seconds left for the technician to respond, or 0 once the deadline has passed.
+     */
+    public function secondsToRespond(): int
+    {
+        if ($this->status !== OrderStatus::MenungguRespons || $this->response_deadline === null) {
+            return 0;
+        }
+
+        return max(0, (int) now()->diffInSeconds($this->response_deadline, false));
+    }
+
+    public function brandLabel(): string
+    {
+        return $this->ac_brand === 'Lainnya' && $this->ac_brand_other ? $this->ac_brand_other : $this->ac_brand;
+    }
+
+    public function fullAddress(): string
+    {
+        return collect([$this->address, $this->address_detail])->filter()->implode(', ');
     }
 }

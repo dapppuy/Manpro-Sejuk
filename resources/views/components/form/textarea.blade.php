@@ -13,7 +13,7 @@
     <label for="{{ $id }}" class="text-sm font-semibold">
         {{ $label }}@if ($required)<span class="ml-0.5 text-coral">*</span>@endif
     </label>
-    <textarea id="{{ $id }}" rows="{{ $rows }}" {{ $attributes->except(['class', 'id'])->class([
+    <textarea id="{{ $id }}" rows="{{ $rows }}" name="{{ $name }}" @required($required) {{ $attributes->except(['class', 'id'])->class([
         'mt-2 w-full rounded-xl bg-white px-4 py-3 text-sm ring-1 ring-inset outline-none placeholder:text-mute focus:ring-ice disabled:bg-paper disabled:text-ink-soft',
         'ring-coral/60' => $errors->has($name),
         'ring-line' => ! $errors->has($name),

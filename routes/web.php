@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\TechnicianDocumentController;
+use App\Http\Controllers\OrderMediaController;
 use App\Http\Middleware\EnsureTechnicianIsApproved;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -12,6 +13,13 @@ Route::livewire('teknisi/{technician}', 'pages::technicians.show')->name('techni
 
 Route::middleware(['auth'])->group(function () {
     Route::get('dashboard', fn (Request $request): RedirectResponse => redirect($request->user()->homeRoute()))->name('dashboard');
+    Route::get('pesanan/media/{media}', OrderMediaController::class)->name('orders.media');
+});
+
+Route::middleware(['auth', 'role:customer'])->group(function () {
+    Route::livewire('pesan/{technician}', 'pages::requests.create')->name('requests.create');
+    Route::livewire('pesanan', 'pages::orders.index')->name('orders.index');
+    Route::livewire('pesanan/{order}', 'pages::orders.show')->name('orders.show');
 });
 
 Route::prefix('mitra')->name('mitra.')->group(function () {
@@ -25,6 +33,9 @@ Route::prefix('mitra')->name('mitra.')->group(function () {
 
         Route::middleware(EnsureTechnicianIsApproved::class)->group(function () {
             Route::livewire('/', 'pages::mitra.dashboard')->name('dashboard');
+            Route::livewire('pesanan', 'pages::mitra.orders.index')->name('orders.index');
+            Route::livewire('pesanan/{order}', 'pages::mitra.orders.show')->name('orders.show');
+            Route::livewire('pesanan/{order}/estimasi', 'pages::mitra.orders.estimate')->name('orders.estimate');
             Route::livewire('profil', 'pages::mitra.profile')->name('profile');
             Route::livewire('harga', 'pages::mitra.prices')->name('prices');
         });

@@ -19,7 +19,7 @@
         @if ($prefix)
             <span class="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-sm text-mute">{{ $prefix }}</span>
         @endif
-        <input id="{{ $id }}" type="{{ $type }}" {{ $attributes->except(['class', 'id'])->class([
+        <input id="{{ $id }}" type="{{ $type }}" name="{{ $name }}" @required($required) {{ $attributes->except(['class', 'id'])->class([
             'h-12 w-full rounded-xl bg-white px-4 text-sm ring-1 ring-inset outline-none placeholder:text-mute focus:ring-ice disabled:bg-paper disabled:text-ink-soft',
             'pl-10' => $prefix,
             'ring-coral/60' => $errors->has($name),

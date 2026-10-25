@@ -47,3 +47,27 @@ test('technicians cannot open the admin portal', function () {
 test('guests are sent to login from the technician portal', function () {
     $this->get(route('mitra.dashboard'))->assertRedirect(route('login'));
 });
+
+test('the technician login form posts the credentials Fortify expects', function () {
+    $this->get(route('mitra.login'))
+        ->assertOk()
+        ->assertSee('name="email"', false)
+        ->assertSee('name="password"', false);
+});
+
+test('signing in ignores an intended page from another portal', function () {
+    $user = User::factory()->technician()->create();
+    TechnicianProfile::factory()->for($user)->create();
+
+    $this->withSession(['url.intended' => url('/pesanan/SJK-1234')])
+        ->post(route('login.store'), ['email' => $user->email, 'password' => 'password'])
+        ->assertRedirect(route('mitra.dashboard'));
+});
+
+test('signing in returns a customer to the page they were asked to log in for', function () {
+    $customer = User::factory()->customer()->create();
+
+    $this->withSession(['url.intended' => url('/pesan/budi-teknik-ac')])
+        ->post(route('login.store'), ['email' => $customer->email, 'password' => 'password'])
+        ->assertRedirect(url('/pesan/budi-teknik-ac'));
+});

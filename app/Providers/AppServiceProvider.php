@@ -53,6 +53,9 @@ class AppServiceProvider extends ServiceProvider
 
         CarbonImmutable::setLocale(config('app.locale'));
 
+        // Damage videos can exceed Livewire's default 12 MB temporary upload limit.
+        config(['livewire.temporary_file_upload.rules' => ['required', 'file', 'max:20480']]);
+
         DB::prohibitDestructiveCommands(
             app()->isProduction(),
         );
