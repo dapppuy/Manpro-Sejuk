@@ -36,6 +36,7 @@ Route::prefix('mitra')->name('mitra.')->group(function () {
             Route::livewire('pesanan', 'pages::mitra.orders.index')->name('orders.index');
             Route::livewire('pesanan/{order}', 'pages::mitra.orders.show')->name('orders.show');
             Route::livewire('pesanan/{order}/estimasi', 'pages::mitra.orders.estimate')->name('orders.estimate');
+            Route::livewire('pesanan/{order}/biaya-final', 'pages::mitra.orders.final-cost')->name('orders.final-cost');
             Route::livewire('profil', 'pages::mitra.profile')->name('profile');
             Route::livewire('harga', 'pages::mitra.prices')->name('prices');
         });

@@ -16,6 +16,8 @@ use Livewire\Component;
 new #[Layout('layouts::customer')] class extends Component {
     public Order $order;
 
+    public bool $confirmRejectFinal = false;
+
     public function mount(Order $order): void
     {
         Gate::authorize('manage', $order);
@@ -75,6 +77,17 @@ new #[Layout('layouts::customer')] class extends Component {
         }
     }
 
+    public function approveFinalCost(OrderWorkflow $workflow): void
+    {
+        $this->runAction(fn () => $workflow->approveFinalCost($this->order, auth()->user()));
+    }
+
+    public function rejectFinalCost(OrderWorkflow $workflow): void
+    {
+        $this->runAction(fn () => $workflow->rejectFinalCost($this->order, auth()->user()));
+        $this->confirmRejectFinal = false;
+    }
+
     public function findOtherTechnician(): void
     {
         session([
@@ -105,7 +118,7 @@ new #[Layout('layouts::customer')] class extends Component {
 
     public function render(): \Illuminate\Contracts\View\View
     {
-        $this->order->loadMissing(['technician.user', 'service', 'media', 'offers']);
+        $this->order->loadMissing(['technician.user', 'service', 'media', 'offers', 'costItems']);
 
         return $this->view()->title('Pesanan #'.$this->order->code);
     }
@@ -141,7 +154,7 @@ new #[Layout('layouts::customer')] class extends Component {
 @endphp
 
 <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6"
-    @if (in_array($status, [OrderStatus::MenungguRespons, OrderStatus::EstimasiMasuk, OrderStatus::Terjadwal], true)) wire:poll.10s="refreshOrder" @endif>
+    @if (in_array($status, [OrderStatus::MenungguRespons, OrderStatus::EstimasiMasuk, OrderStatus::Terjadwal, OrderStatus::MenungguPersetujuanBiaya], true)) wire:poll.10s="refreshOrder" @endif>
     <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
             <p class="text-sm text-mute tnum">Pesanan #{{ $order->code }}</p>
@@ -271,11 +284,78 @@ new #[Layout('layouts::customer')] class extends Component {
                     </x-order.panel>
                     @break
 
+                @case(OrderStatus::MenungguPersetujuanBiaya)
+                    @php
+                        $changed = $order->costItems->contains('is_additional', true);
+                        $over = $order->amountOverEstimate();
+                    @endphp
+                    <x-order.panel icon="circle-alert" icon-class="text-sun-ink"
+                        :title="$changed ? 'Biaya berubah setelah pemeriksaan' : 'Konfirmasi biaya final'"
+                        :sub="$changed ? 'Teknisi menemukan pekerjaan tambahan. Pekerjaan belum dimulai sampai kamu menyetujui.' : 'Biaya final masih dalam kisaran estimasi. Setujui untuk memulai pekerjaan.'">
+                        <div class="mt-6 overflow-hidden rounded-2xl ring-1 ring-line">
+                            <ul>
+                                @foreach ($order->costItems as $item)
+                                    <li wire:key="cost-{{ $item->id }}" @class(['flex items-center justify-between gap-4 border-b border-line px-4 py-3.5 sm:px-5', 'bg-sun-soft/50' => $item->is_additional])>
+                                        <span class="flex flex-wrap items-center gap-2">
+                                            {{ $item->label }}
+                                            @if ($item->is_additional)
+                                                <span class="rounded bg-sun px-1.5 py-0.5 text-[10px] font-bold text-ink uppercase">Baru</span>
+                                            @endif
+                                        </span>
+                                        <span class="shrink-0 font-semibold tnum">{{ rupiah($item->amount) }}</span>
+                                    </li>
+                                @endforeach
+                            </ul>
+                            <div class="grid grid-cols-2 bg-paper">
+                                <div class="border-r border-line px-4 py-4 sm:px-5">
+                                    <p class="text-xs text-mute">Estimasi awal</p>
+                                    <p class="mt-0.5 font-semibold text-ink-soft tnum">{{ rupiah($order->estimate_min) }} – {{ rupiah($order->estimate_max) }}</p>
+                                </div>
+                                <div class="px-4 py-4 sm:px-5">
+                                    <p class="text-xs text-mute">Total biaya final</p>
+                                    <p class="mt-0.5 text-2xl font-extrabold tnum">{{ rupiah($order->final_total) }}</p>
+                                    @if ($over > 0)
+                                        <p class="text-xs font-semibold text-coral tnum">+{{ rupiah($over) }} di atas estimasi</p>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                        @if ($order->warranty)
+                            <p class="mt-3 text-xs text-mute">Total termasuk Garansi Servis {{ config('sejuk.warranty.days') }} Hari yang kamu pilih.</p>
+                        @endif
+
+                        @if (! $confirmRejectFinal)
+                            <div class="mt-8 flex flex-wrap gap-3">
+                                <x-button size="lg" icon="check" wire:click="approveFinalCost" wire:loading.attr="disabled">Setujui & lanjut bayar</x-button>
+                                <x-button size="lg" variant="danger" wire:click="$set('confirmRejectFinal', true)">Tolak biaya final</x-button>
+                            </div>
+                        @else
+                            <div class="rise mt-8 rounded-2xl bg-coral-soft p-5">
+                                <p class="font-bold">Tolak biaya final?</p>
+                                <p class="mt-1 text-sm text-ink-soft">Pekerjaan tidak akan dimulai dan pesanan ditutup. Biaya kunjungan: <span class="font-semibold">{{ config('sejuk.visit_fee') > 0 ? rupiah(config('sejuk.visit_fee')) : 'gratis' }}</span>.</p>
+                                <div class="mt-4 flex flex-wrap gap-2">
+                                    <x-button variant="danger" wire:click="rejectFinalCost">Ya, tolak</x-button>
+                                    <x-button variant="ghost" wire:click="$set('confirmRejectFinal', false)">Kembali</x-button>
+                                </div>
+                            </div>
+                        @endif
+                    </x-order.panel>
+                    @break
+
+                @case(OrderStatus::MenungguPembayaran)
+                    <x-order.panel icon="credit-card" title="Biaya final disetujui" :sub="'Total '.rupiah($order->final_total).'. Bayar online lewat QRIS, virtual account, atau e-wallet. Dana ditahan Sejuk sampai kamu konfirmasi pekerjaan selesai.'">
+                        <p class="mt-5 rounded-2xl bg-sun-soft px-4 py-3 text-sm text-sun-ink">Halaman pembayaran sedang disiapkan.</p>
+                    </x-order.panel>
+                    @break
+
                 @case(OrderStatus::Dibatalkan)
-                    <x-order.panel icon="circle-x" icon-class="text-ink-soft" title="Pesanan dibatalkan" sub="Pesanan dibatalkan sebelum teknisi berangkat, tanpa biaya apa pun.">
+                    @php $finalRejected = $order->cancelled_reason === OrderWorkflow::REASON_FINAL_COST_REJECTED; @endphp
+                    <x-order.panel icon="circle-x" icon-class="text-ink-soft"
+                        :title="$finalRejected ? 'Pekerjaan tidak dimulai' : 'Pesanan dibatalkan'"
+                        :sub="$finalRejected ? 'Kamu menolak biaya final. Teknisi tidak mengerjakan apa pun dan pesanan ditutup.' : 'Pesanan dibatalkan sebelum teknisi berangkat, tanpa biaya apa pun.'">
                         <div class="mt-5 flex items-center justify-between rounded-2xl bg-paper px-5 py-4 text-sm">
-                            <span>Biaya pembatalan</span>
-                            <span class="font-bold tnum">Rp0</span>
+                            <span>{{ $finalRejected ? 'Biaya kunjungan' : 'Biaya pembatalan' }}</span>
+                            <span class="font-bold tnum">{{ $finalRejected ? rupiah(config('sejuk.visit_fee')) : 'Rp0' }}</span>
                         </div>
                         <div class="mt-8 flex flex-wrap gap-3">
                             <x-button size="lg" :href="route('search', ['layanan' => $order->service->slug])" wire:navigate>Cari teknisi lain</x-button>
@@ -320,6 +400,7 @@ new #[Layout('layouts::customer')] class extends Component {
                         'Jadwal' => $scheduleDate->translatedFormat('l, j F').', '.($order->scheduled_window ? $scheduleWindow->range().' WIB' : str($scheduleWindow->label())->lower()),
                         'Estimasi' => $order->estimate_min ? rupiah($order->estimate_min).' – '.rupiah($order->estimate_max) : null,
                         'Garansi' => $order->warranty ? config('sejuk.warranty.days').' hari' : null,
+                        'Biaya final' => $order->final_total !== null && ! in_array($status, [OrderStatus::Terjadwal, OrderStatus::Dibatalkan], true) ? rupiah($order->final_total) : null,
                     ]) as $label => $value)
                         <div wire:key="row-{{ $loop->index }}" class="flex justify-between gap-4">
                             <dt class="shrink-0 text-mute">{{ $label }}</dt>

@@ -7,6 +7,7 @@ use App\Enums\FundStatus;
 use App\Enums\OfferStatus;
 use App\Enums\OrderStatus;
 use App\Enums\TimeWindow;
+use Carbon\CarbonInterface;
 use Database\Factories\OrderFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -16,7 +17,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Carbon;
+use Carbon\CarbonImmutable;
 
 /**
  * @property int $id
@@ -31,7 +32,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $address_detail
  * @property float|null $latitude
  * @property float|null $longitude
- * @property Carbon $preferred_date
+ * @property CarbonImmutable $preferred_date
  * @property TimeWindow $time_window
  * @property string|null $notes
  * @property bool $warranty
@@ -39,19 +40,22 @@ use Illuminate\Support\Carbon;
  * @property int|null $estimate_min
  * @property int|null $estimate_max
  * @property string|null $estimate_note
- * @property Carbon|null $scheduled_date
+ * @property CarbonImmutable|null $scheduled_date
  * @property TimeWindow|null $scheduled_window
  * @property int|null $final_total
  * @property int|null $commission_amount
  * @property OrderStatus $status
  * @property FundStatus|null $fund_status
- * @property Carbon|null $response_deadline
- * @property Carbon|null $proof_submitted_at
+ * @property CarbonImmutable|null $final_cost_submitted_at
+ * @property CarbonImmutable|null $reminded_day_before_at
+ * @property CarbonImmutable|null $reminded_hour_before_at
+ * @property CarbonImmutable|null $response_deadline
+ * @property CarbonImmutable|null $proof_submitted_at
  * @property int $rework_count
  * @property string|null $cancelled_reason
- * @property Carbon|null $completed_at
- * @property Carbon|null $created_at
- * @property Carbon|null $updated_at
+ * @property CarbonImmutable|null $completed_at
+ * @property CarbonImmutable|null $created_at
+ * @property CarbonImmutable|null $updated_at
  * @property-read User $customer
  * @property-read TechnicianProfile|null $technician
  * @property-read Service $service
@@ -62,7 +66,7 @@ use Illuminate\Support\Carbon;
     'customer_id', 'technician_id', 'service_id', 'ac_capacity', 'ac_brand', 'ac_brand_other', 'address',
     'address_detail', 'latitude', 'longitude', 'preferred_date', 'time_window', 'notes', 'warranty', 'warranty_fee',
     'estimate_min', 'estimate_max', 'estimate_note', 'scheduled_date', 'scheduled_window', 'final_total',
-    'commission_amount', 'status', 'fund_status', 'response_deadline', 'proof_submitted_at', 'rework_count',
+    'commission_amount', 'final_cost_submitted_at', 'reminded_day_before_at', 'reminded_hour_before_at', 'status', 'fund_status', 'response_deadline', 'proof_submitted_at', 'rework_count',
     'cancelled_reason', 'completed_at',
 ])]
 class Order extends Model
@@ -106,6 +110,9 @@ class Order extends Model
             'status' => OrderStatus::class,
             'fund_status' => FundStatus::class,
             'response_deadline' => 'datetime',
+            'final_cost_submitted_at' => 'datetime',
+            'reminded_day_before_at' => 'datetime',
+            'reminded_hour_before_at' => 'datetime',
             'proof_submitted_at' => 'datetime',
             'completed_at' => 'datetime',
         ];
@@ -163,6 +170,38 @@ class Order extends Model
     public function offers(): HasMany
     {
         return $this->hasMany(OrderOffer::class);
+    }
+
+    /**
+     * @return HasMany<OrderCostItem, $this>
+     */
+    public function costItems(): HasMany
+    {
+        return $this->hasMany(OrderCostItem::class)->orderBy('id');
+    }
+
+    /**
+     * How far the final total lands above the estimate maximum (0 when within the estimate).
+     */
+    public function amountOverEstimate(): int
+    {
+        if ($this->final_total === null || $this->estimate_max === null) {
+            return 0;
+        }
+
+        return max(0, $this->final_total - $this->estimate_max - $this->warranty_fee);
+    }
+
+    /**
+     * When the technician is due to arrive: the start of the scheduled window.
+     */
+    public function visitStartsAt(): ?CarbonInterface
+    {
+        if ($this->scheduled_date === null || $this->scheduled_window === null) {
+            return null;
+        }
+
+        return $this->scheduled_date->setTime($this->scheduled_window->startHour(), 0);
     }
 
     /**

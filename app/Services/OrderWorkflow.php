@@ -21,6 +21,10 @@ use Illuminate\Support\Str;
  */
 class OrderWorkflow
 {
+    public const REASON_FINAL_COST_REJECTED = 'Biaya final ditolak';
+
+    public const REASON_CUSTOMER_CANCELLED = 'Dibatalkan pelanggan';
+
     public function __construct(private TechnicianSearch $search) {}
 
     /**
@@ -165,6 +169,66 @@ class OrderWorkflow
     }
 
     /**
+     * L-07 (technician side): after inspecting the AC the technician sends the final cost lines.
+     * The warranty fee the customer chose is added automatically. Sending again while the
+     * customer has not decided replaces the previous lines.
+     *
+     * @param  list<array{label: string, amount: int, is_additional: bool}>  $items
+     */
+    public function submitFinalCost(Order $order, TechnicianProfile $technician, array $items): void
+    {
+        $this->ensureStatus($order, [OrderStatus::Terjadwal, OrderStatus::MenungguPersetujuanBiaya]);
+        $this->ensureAssigned($order, $technician);
+
+        if ($items === []) {
+            throw new InvalidOrderTransition('Isi minimal satu rincian biaya.');
+        }
+
+        DB::transaction(function () use ($order, $technician, $items) {
+            $order->costItems()->delete();
+            $order->costItems()->createMany($items);
+
+            if ($order->warranty) {
+                $order->costItems()->create([
+                    'label' => 'Garansi Servis '.config('sejuk.warranty.days').' Hari',
+                    'amount' => $order->warranty_fee,
+                    'is_additional' => false,
+                ]);
+            }
+
+            $order->final_total = (int) $order->costItems()->sum('amount');
+            $order->final_cost_submitted_at = now();
+
+            if ($order->status === OrderStatus::MenungguPersetujuanBiaya) {
+                $order->save();
+                $this->log($order, OrderStatus::MenungguPersetujuanBiaya, OrderStatus::MenungguPersetujuanBiaya, $technician->user, 'Biaya final diperbarui');
+
+                return;
+            }
+
+            $this->transition($order, OrderStatus::MenungguPersetujuanBiaya, $technician->user);
+        });
+    }
+
+    public function approveFinalCost(Order $order, User $customer): void
+    {
+        $this->ensureStatus($order, [OrderStatus::MenungguPersetujuanBiaya]);
+
+        $this->transition($order, OrderStatus::MenungguPembayaran, $customer);
+    }
+
+    /**
+     * The customer declines the final cost: work does not start and the order closes.
+     */
+    public function rejectFinalCost(Order $order, User $customer): void
+    {
+        $this->ensureStatus($order, [OrderStatus::MenungguPersetujuanBiaya]);
+
+        $order->cancelled_reason = self::REASON_FINAL_COST_REJECTED;
+        $this->transition($order, OrderStatus::Dibatalkan, $customer, 'Biaya final ditolak pelanggan');
+    }
+
+    /**
      * Free cancellation by the customer before the technician sets off.
      */
     public function cancelByCustomer(Order $order, User $customer): void
@@ -176,7 +240,7 @@ class OrderWorkflow
         DB::transaction(function () use ($order, $customer) {
             $order->offers()->where('status', OfferStatus::Menunggu)->update(['status' => OfferStatus::Kedaluwarsa, 'responded_at' => now()]);
 
-            $order->fill(['cancelled_reason' => 'Dibatalkan pelanggan', 'response_deadline' => null]);
+            $order->fill(['cancelled_reason' => self::REASON_CUSTOMER_CANCELLED, 'response_deadline' => null]);
             $this->transition($order, OrderStatus::Dibatalkan, $customer);
         });
     }

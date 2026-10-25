@@ -66,7 +66,7 @@ new #[Layout('layouts::mitra')] class extends Component {
     {
         $this->order->refresh();
         app(OrderWorkflow::class)->expireIfOverdue($this->order);
-        $this->order->load(['service', 'customer', 'media']);
+        $this->order->load(['service', 'customer', 'media', 'costItems']);
 
         return $this->view()->title('Pesanan #'.$this->order->code);
     }
@@ -80,7 +80,7 @@ new #[Layout('layouts::mitra')] class extends Component {
     $window = $order->scheduled_window ?? $order->time_window;
 @endphp
 
-<div @if ($incoming) wire:poll.15s @endif>
+<div @if ($incoming || $status === OrderStatus::MenungguPersetujuanBiaya || $status === OrderStatus::MenungguPembayaran) wire:poll.15s @endif>
     <a href="{{ route('mitra.orders.index') }}" wire:navigate class="inline-flex items-center gap-2 text-sm font-semibold text-ink-soft hover:text-ink">
         <flux:icon.arrow-left class="size-4" /> Kembali ke pesanan
     </a>
@@ -111,16 +111,63 @@ new #[Layout('layouts::mitra')] class extends Component {
                         <p class="mt-1 text-ink-soft">Estimasi {{ rupiah($order->estimate_min) }} – {{ rupiah($order->estimate_max) }} untuk {{ $date->translatedFormat('l, j F') }}, {{ $window->range() }} WIB.</p>
                     </div>
                 </div>
-            @elseif ($this->isMine && $status === OrderStatus::Terjadwal)
-                <div class="flex items-start gap-3 rounded-2xl bg-leaf-soft p-5 text-sm text-leaf">
-                    <flux:icon.calendar-check class="mt-0.5 size-5 shrink-0" />
-                    <div>
-                        <p class="font-bold">Estimasi disetujui, kunjungan terjadwal</p>
-                        <p class="mt-1">Datang {{ $date->translatedFormat('l, j F') }}, {{ $window->range() }} WIB. Setelah memeriksa AC, kirim biaya final ke pelanggan.</p>
+            @elseif ($this->isMine && in_array($status, [OrderStatus::Terjadwal, OrderStatus::MenungguPersetujuanBiaya, OrderStatus::MenungguPembayaran, OrderStatus::Dikerjakan], true))
+                @php
+                    $finalSent = $order->final_total !== null && $status !== OrderStatus::Terjadwal;
+                    $timeline = [
+                        ['Penawaran diterima', 'Estimasi '.rupiah($order->estimate_min).'–'.rupiah($order->estimate_max), true],
+                        ['Kunjungan teknisi', $date->translatedFormat('l, j F').', '.$window->range().' WIB', $finalSent],
+                        ['Biaya final', match ($status) {
+                            OrderStatus::Terjadwal => 'Isi setelah pemeriksaan',
+                            OrderStatus::MenungguPersetujuanBiaya => rupiah($order->final_total).' · menunggu persetujuan pelanggan',
+                            default => rupiah($order->final_total).' · disetujui pelanggan',
+                        }, in_array($status, [OrderStatus::MenungguPembayaran, OrderStatus::Dikerjakan], true)],
+                        ['Bukti kerja', match ($status) {
+                            OrderStatus::Dikerjakan => 'Pembayaran diterima, kerjakan lalu unggah bukti',
+                            OrderStatus::MenungguPembayaran => 'Menunggu pelanggan membayar',
+                            default => 'Menunggu biaya final disetujui',
+                        }, false],
+                    ];
+                @endphp
+                <x-card class="p-5 sm:p-6">
+                    <div class="flex items-center gap-3">
+                        <span class="grid size-11 place-items-center rounded-xl bg-frost text-ice"><flux:icon.calendar-clock class="size-5" /></span>
+                        <div>
+                            <p class="font-bold">{{ $status === OrderStatus::Terjadwal ? 'Kunjungan terjadwal' : $status->label() }}</p>
+                            <p class="text-sm text-ink-soft">{{ $date->translatedFormat('l, j F') }}, {{ $window->range() }} WIB</p>
+                        </div>
                     </div>
-                </div>
+                    <ol class="mt-7 space-y-5 border-l-2 border-line pl-6">
+                        @foreach ($timeline as $index => [$title, $detail, $done])
+                            <li wire:key="t-{{ $index }}" class="relative">
+                                <span @class(['absolute top-1 -left-[31px] size-3 rounded-full ring-4 ring-white', 'bg-ice' => $done, 'bg-line' => ! $done])></span>
+                                <p class="font-semibold">{{ $title }}</p>
+                                <p class="mt-0.5 text-sm text-mute">{{ $detail }}</p>
+                            </li>
+                        @endforeach
+                    </ol>
+                </x-card>
+
+                @if ($status === OrderStatus::MenungguPersetujuanBiaya && $order->costItems->isNotEmpty())
+                    <x-card class="overflow-hidden">
+                        <ul>
+                            @foreach ($order->costItems as $item)
+                                <li wire:key="ci-{{ $item->id }}" @class(['flex items-center justify-between gap-4 border-b border-line px-5 py-3 text-sm', 'bg-sun-soft/50' => $item->is_additional])>
+                                    <span>{{ $item->label }} @if ($item->is_additional)<span class="ml-1 rounded bg-sun px-1.5 py-0.5 text-[10px] font-bold uppercase">Baru</span>@endif</span>
+                                    <span class="font-semibold tnum">{{ rupiah($item->amount) }}</span>
+                                </li>
+                            @endforeach
+                        </ul>
+                        <div class="flex items-center justify-between bg-paper px-5 py-3 text-sm">
+                            <span class="text-mute">Total</span>
+                            <span class="text-lg font-extrabold tnum">{{ rupiah($order->final_total) }}</span>
+                        </div>
+                    </x-card>
+                @endif
             @elseif ($this->isMine && $status === OrderStatus::Dibatalkan)
-                <div class="rounded-2xl bg-ink/5 p-5 text-sm text-ink-soft">Pesanan dibatalkan oleh pelanggan.</div>
+                <div class="rounded-2xl bg-ink/5 p-5 text-sm text-ink-soft">
+                    {{ $order->cancelled_reason === \App\Services\OrderWorkflow::REASON_FINAL_COST_REJECTED ? 'Pelanggan menolak biaya final. Pekerjaan tidak dimulai dan pesanan ditutup.' : 'Pesanan dibatalkan oleh pelanggan.' }}
+                </div>
             @endif
 
             <x-card class="p-5 sm:p-6">
@@ -190,8 +237,17 @@ new #[Layout('layouts::mitra')] class extends Component {
                     <x-button class="w-full" icon="send" :href="route('mitra.orders.estimate', $order)" wire:navigate>Kirim Penawaran</x-button>
                     <x-button class="w-full" variant="danger" wire:click="reject" wire:confirm="Tolak pesanan ini? Pelanggan akan memilih teknisi cadangan.">Tolak pesanan</x-button>
                 </div>
-            @elseif ($this->isMine && $status === OrderStatus::Terjadwal && $order->customer->phone)
-                <x-button variant="secondary" size="sm" icon="message-circle" class="mt-5 w-full" :href="'https://wa.me/62'.substr($order->customer->phone, 1)" target="_blank" rel="noopener">Hubungi pelanggan</x-button>
+            @elseif ($this->isMine && in_array($status, [OrderStatus::Terjadwal, OrderStatus::MenungguPersetujuanBiaya, OrderStatus::MenungguPembayaran, OrderStatus::Dikerjakan], true))
+                <div class="mt-5 space-y-2">
+                    @if ($status === OrderStatus::Terjadwal)
+                        <x-button size="lg" class="w-full" icon="receipt-text" :href="route('mitra.orders.final-cost', $order)" wire:navigate>Input Biaya Final</x-button>
+                    @elseif ($status === OrderStatus::MenungguPersetujuanBiaya)
+                        <x-button variant="secondary" class="w-full" icon="pencil" :href="route('mitra.orders.final-cost', $order)" wire:navigate>Ubah biaya final</x-button>
+                    @endif
+                    @if ($order->customer->phone)
+                        <x-button variant="secondary" size="sm" icon="message-circle" class="w-full" :href="'https://wa.me/62'.substr($order->customer->phone, 1)" target="_blank" rel="noopener">Hubungi pelanggan</x-button>
+                    @endif
+                </div>
             @endif
         </x-card>
     </div>
