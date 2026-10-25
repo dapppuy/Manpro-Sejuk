@@ -66,7 +66,7 @@ new #[Layout('layouts::mitra')] class extends Component {
     {
         $this->order->refresh();
         app(OrderWorkflow::class)->expireIfOverdue($this->order);
-        $this->order->load(['service', 'customer', 'media', 'costItems']);
+        $this->order->load(['service', 'customer', 'media', 'costItems', 'workProofs']);
 
         return $this->view()->title('Pesanan #'.$this->order->code);
     }
@@ -78,9 +78,13 @@ new #[Layout('layouts::mitra')] class extends Component {
     $incoming = $status === OrderStatus::MenungguRespons && $this->isMine;
     $date = $order->scheduled_date ?? $order->preferred_date;
     $window = $order->scheduled_window ?? $order->time_window;
+    $activeStatuses = [
+        OrderStatus::Terjadwal, OrderStatus::MenungguPersetujuanBiaya, OrderStatus::MenungguPembayaran, OrderStatus::Dikerjakan,
+        OrderStatus::PerbaikanUlang, OrderStatus::MenungguKonfirmasi, OrderStatus::Sengketa, OrderStatus::Selesai,
+    ];
 @endphp
 
-<div @if ($incoming || $status === OrderStatus::MenungguPersetujuanBiaya || $status === OrderStatus::MenungguPembayaran) wire:poll.15s @endif>
+<div @if ($incoming || in_array($status, [OrderStatus::MenungguPersetujuanBiaya, OrderStatus::MenungguPembayaran, OrderStatus::MenungguKonfirmasi], true)) wire:poll.15s @endif>
     <a href="{{ route('mitra.orders.index') }}" wire:navigate class="inline-flex items-center gap-2 text-sm font-semibold text-ink-soft hover:text-ink">
         <flux:icon.arrow-left class="size-4" /> Kembali ke pesanan
     </a>
@@ -111,7 +115,7 @@ new #[Layout('layouts::mitra')] class extends Component {
                         <p class="mt-1 text-ink-soft">Estimasi {{ rupiah($order->estimate_min) }} – {{ rupiah($order->estimate_max) }} untuk {{ $date->translatedFormat('l, j F') }}, {{ $window->range() }} WIB.</p>
                     </div>
                 </div>
-            @elseif ($this->isMine && in_array($status, [OrderStatus::Terjadwal, OrderStatus::MenungguPersetujuanBiaya, OrderStatus::MenungguPembayaran, OrderStatus::Dikerjakan], true))
+            @elseif ($this->isMine && in_array($status, $activeStatuses, true))
                 @php
                     $finalSent = $order->final_total !== null && $status !== OrderStatus::Terjadwal;
                     $timeline = [
@@ -120,13 +124,18 @@ new #[Layout('layouts::mitra')] class extends Component {
                         ['Biaya final', match ($status) {
                             OrderStatus::Terjadwal => 'Isi setelah pemeriksaan',
                             OrderStatus::MenungguPersetujuanBiaya => rupiah($order->final_total).' · menunggu persetujuan pelanggan',
-                            default => rupiah($order->final_total).' · disetujui pelanggan',
-                        }, in_array($status, [OrderStatus::MenungguPembayaran, OrderStatus::Dikerjakan], true)],
+                            OrderStatus::MenungguPembayaran => rupiah($order->final_total).' · disetujui pelanggan',
+                            default => rupiah($order->final_total).' · dibayar, dana ditahan Sejuk',
+                        }, ! in_array($status, [OrderStatus::Terjadwal, OrderStatus::MenungguPersetujuanBiaya], true)],
                         ['Bukti kerja', match ($status) {
                             OrderStatus::Dikerjakan => 'Pembayaran diterima, kerjakan lalu unggah bukti',
+                            OrderStatus::PerbaikanUlang => 'Pelanggan meminta perbaikan ulang ke-'.$order->rework_count.', tanpa biaya tambahan',
+                            OrderStatus::MenungguKonfirmasi => 'Terkirim, menunggu konfirmasi pelanggan · otomatis selesai '.$order->autoCompletesAt()?->translatedFormat('j M, H.i'),
+                            OrderStatus::Sengketa => 'Pelanggan masih belum puas setelah '.config('sejuk.max_rework').' kali perbaikan ulang. Tim Sejuk meninjau pesanan ini.',
+                            OrderStatus::Selesai => 'Dikonfirmasi '.$order->completed_at?->translatedFormat('j M Y, H.i'),
                             OrderStatus::MenungguPembayaran => 'Menunggu pelanggan membayar',
                             default => 'Menunggu biaya final disetujui',
-                        }, false],
+                        }, in_array($status, [OrderStatus::MenungguKonfirmasi, OrderStatus::Selesai], true)],
                     ];
                 @endphp
                 <x-card class="p-5 sm:p-6">
@@ -147,6 +156,16 @@ new #[Layout('layouts::mitra')] class extends Component {
                         @endforeach
                     </ol>
                 </x-card>
+
+                @if ($status === OrderStatus::Selesai)
+                    <div class="flex items-start gap-3 rounded-2xl bg-leaf-soft p-5 text-sm text-leaf">
+                        <flux:icon.banknote class="mt-0.5 size-5 shrink-0" />
+                        <div>
+                            <p class="font-bold">Dana diteruskan: {{ rupiah($order->technicianPayout()) }}</p>
+                            <p class="mt-1">Total {{ rupiah($order->final_total) }} dikurangi komisi Sejuk {{ config('sejuk.commission_percent') }}% ({{ rupiah($order->commission_amount) }}).</p>
+                        </div>
+                    </div>
+                @endif
 
                 @if ($status === OrderStatus::MenungguPersetujuanBiaya && $order->costItems->isNotEmpty())
                     <x-card class="overflow-hidden">
@@ -237,8 +256,11 @@ new #[Layout('layouts::mitra')] class extends Component {
                     <x-button class="w-full" icon="send" :href="route('mitra.orders.estimate', $order)" wire:navigate>Kirim Penawaran</x-button>
                     <x-button class="w-full" variant="danger" wire:click="reject" wire:confirm="Tolak pesanan ini? Pelanggan akan memilih teknisi cadangan.">Tolak pesanan</x-button>
                 </div>
-            @elseif ($this->isMine && in_array($status, [OrderStatus::Terjadwal, OrderStatus::MenungguPersetujuanBiaya, OrderStatus::MenungguPembayaran, OrderStatus::Dikerjakan], true))
+            @elseif ($this->isMine && in_array($status, $activeStatuses, true))
                 <div class="mt-5 space-y-2">
+                    @if (in_array($status, [OrderStatus::Dikerjakan, OrderStatus::PerbaikanUlang], true))
+                        <x-button size="lg" class="w-full" icon="camera" :href="route('mitra.orders.proof', $order)" wire:navigate>Upload Bukti Kerja</x-button>
+                    @endif
                     @if ($status === OrderStatus::Terjadwal)
                         <x-button size="lg" class="w-full" icon="receipt-text" :href="route('mitra.orders.final-cost', $order)" wire:navigate>Input Biaya Final</x-button>
                     @elseif ($status === OrderStatus::MenungguPersetujuanBiaya)

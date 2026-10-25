@@ -24,6 +24,10 @@ new #[Layout('layouts::customer')] class extends Component {
 
     public ?string $paymentMethod = null;
 
+    public bool $showReworkForm = false;
+
+    public string $complaint = '';
+
     public function mount(Order $order): void
     {
         Gate::authorize('manage', $order);
@@ -149,6 +153,19 @@ new #[Layout('layouts::customer')] class extends Component {
         $this->confirmRejectFinal = false;
     }
 
+    public function confirmCompletion(OrderWorkflow $workflow): void
+    {
+        $this->runAction(fn () => $workflow->confirmCompletion($this->order, auth()->user()));
+    }
+
+    public function requestRework(OrderWorkflow $workflow): void
+    {
+        $this->validate(['complaint' => ['nullable', 'string', 'max:500']], attributes: ['complaint' => 'keluhan']);
+
+        $this->runAction(fn () => $workflow->requestRework($this->order, auth()->user(), trim($this->complaint) ?: null));
+        $this->reset('showReworkForm', 'complaint');
+    }
+
     public function findOtherTechnician(): void
     {
         session([
@@ -179,7 +196,7 @@ new #[Layout('layouts::customer')] class extends Component {
 
     public function render(): \Illuminate\Contracts\View\View
     {
-        $this->order->loadMissing(['technician.user', 'service', 'media', 'offers', 'costItems', 'payments']);
+        $this->order->loadMissing(['technician.user', 'service', 'media', 'offers', 'costItems', 'payments', 'workProofs']);
 
         return $this->view()->title('Pesanan #'.$this->order->code);
     }
@@ -231,7 +248,7 @@ new #[Layout('layouts::customer')] class extends Component {
 @endphp
 
 <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6"
-    @if (in_array($status, [OrderStatus::MenungguRespons, OrderStatus::EstimasiMasuk, OrderStatus::Terjadwal, OrderStatus::MenungguPersetujuanBiaya], true)) wire:poll.10s="refreshOrder" @endif>
+    @if (in_array($status, [OrderStatus::MenungguRespons, OrderStatus::EstimasiMasuk, OrderStatus::Terjadwal, OrderStatus::MenungguPersetujuanBiaya, OrderStatus::Dikerjakan, OrderStatus::PerbaikanUlang], true)) wire:poll.10s="refreshOrder" @endif>
     <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
             <p class="text-sm text-mute tnum">Pesanan #{{ $order->code }}</p>
@@ -432,6 +449,118 @@ new #[Layout('layouts::customer')] class extends Component {
                     </x-order.panel>
                     @break
 
+                @case(OrderStatus::MenungguKonfirmasi)
+                    @php $proof = $order->latestProof(); @endphp
+                    <x-order.panel icon="circle-check" title="Cek dulu sebelum menandai selesai" sub="Teknisi sudah mengunggah bukti kerja. Pastikan AC benar-benar beres selagi teknisi masih di lokasi.">
+                        @if ($order->rework_count > 0)
+                            <p class="mt-4 inline-flex items-center gap-1.5 rounded-full bg-frost px-3 py-1 text-xs font-semibold text-ice-deep">
+                                <flux:icon.rotate-ccw class="size-3.5" /> Bukti baru setelah perbaikan ulang
+                            </p>
+                        @endif
+                        @if ($proof)
+                            <div class="mt-6 grid grid-cols-2 gap-3">
+                                @foreach (['sebelum' => 'Sebelum', 'sesudah' => 'Sesudah'] as $side => $label)
+                                    <figure wire:key="proof-{{ $proof->id }}-{{ $side }}" class="relative overflow-hidden rounded-2xl bg-paper">
+                                        <a href="{{ $proof->photoUrl($side) }}" target="_blank">
+                                            <img src="{{ $proof->photoUrl($side) }}" alt="Foto {{ strtolower($label) }} pengerjaan" class="aspect-[4/3] w-full object-cover" />
+                                        </a>
+                                        <figcaption class="absolute top-3 left-3 rounded-full bg-ink/75 px-3 py-1 text-xs font-bold text-white backdrop-blur">{{ $label }}</figcaption>
+                                    </figure>
+                                @endforeach
+                            </div>
+                            @if ($proof->note)
+                                <p class="mt-4 rounded-2xl bg-paper px-4 py-3 text-sm text-ink-soft"><span class="font-semibold text-ink">Catatan teknisi:</span> {{ $proof->note }}</p>
+                            @endif
+                        @endif
+                        <ul class="mt-6 grid gap-2 text-sm sm:grid-cols-3">
+                            @foreach (['AC menyala dan dingin', 'Tidak ada tetesan air', 'Tidak berisik'] as $check)
+                                <li wire:key="check-{{ $loop->index }}" class="flex items-center gap-2 rounded-xl bg-paper px-3 py-2.5">
+                                    <flux:icon.check class="size-4 text-ice" /> {{ $check }}
+                                </li>
+                            @endforeach
+                        </ul>
+
+                        @if (! $showReworkForm)
+                            <div class="mt-8 flex flex-wrap gap-3">
+                                <x-button size="lg" wire:click="confirmCompletion" wire:confirm="Tandai selesai dan teruskan dana ke teknisi?">Selesai, AC sudah beres</x-button>
+                                <x-button size="lg" variant="secondary" icon="undo-2" wire:click="$set('showReworkForm', true)">Masih bermasalah</x-button>
+                            </div>
+                        @else
+                            <div class="rise mt-8 rounded-2xl bg-sun-soft p-5">
+                                <p class="font-bold">Apa yang masih bermasalah?</p>
+                                <p class="mt-1 text-sm text-ink-soft">Teknisi akan memperbaiki lagi tanpa biaya tambahan. Dana tetap ditahan Sejuk.</p>
+                                <x-form.textarea class="mt-3" label="Keluhan (opsional)" name="complaint" rows="3" wire:model="complaint" placeholder="Contoh: masih ada tetesan air dari unit dalam." />
+                                <div class="mt-4 flex flex-wrap gap-2">
+                                    <x-button wire:click="requestRework">Minta perbaikan ulang</x-button>
+                                    <x-button variant="ghost" wire:click="$set('showReworkForm', false)">Kembali</x-button>
+                                </div>
+                            </div>
+                        @endif
+                        <p class="mt-4 text-xs text-mute">
+                            Menekan &ldquo;Selesai&rdquo; meneruskan {{ rupiah($order->final_total) }} ke {{ $technician?->business_name }}.
+                            Kalau tidak ada konfirmasi, pesanan ditutup dan dana diteruskan otomatis pada {{ $order->autoCompletesAt()?->translatedFormat('j F, H.i') }} WIB.
+                        </p>
+                    </x-order.panel>
+                    @break
+
+                @case(OrderStatus::PerbaikanUlang)
+                    <x-order.panel icon="rotate-ccw" title="Menunggu perbaikan ulang"
+                        :sub="'Kami sudah memberi tahu '.$firstName.' bahwa AC masih bermasalah. Teknisi akan memperbaiki lagi lalu mengunggah bukti baru, tanpa biaya tambahan. Dana tetap ditahan Sejuk.'" />
+                    <x-order.panel>
+                        <p class="font-bold">Perbaikan ulang ke-{{ $order->rework_count }} dari {{ config('sejuk.max_rework') }}</p>
+                        <p class="mt-1 text-sm text-ink-soft">Halaman ini berpindah otomatis saat bukti baru diunggah. Kalau setelah {{ config('sejuk.max_rework') }} kali perbaikan ulang AC masih bermasalah, tim Sejuk akan meninjau pesananmu.</p>
+                    </x-order.panel>
+                    @break
+
+                @case(OrderStatus::Sengketa)
+                    <x-order.panel icon="shield-check" title="Ditinjau tim Sejuk" sub="AC masih bermasalah setelah beberapa kali perbaikan ulang. Tim Sejuk akan menghubungimu untuk mencari penyelesaian. Dana tetap ditahan selama peninjauan." />
+                    @break
+
+                @case(OrderStatus::Selesai)
+                    @php $paid = $order->paidPayment(); @endphp
+                    <x-order.panel>
+                        <div class="flex flex-col items-center py-4 text-center">
+                            <span class="grid size-16 place-items-center rounded-full bg-leaf-soft text-leaf">
+                                <flux:icon.check class="size-8" stroke-width="3" />
+                            </span>
+                            <h2 class="mt-5 text-2xl font-extrabold tracking-tight sm:text-3xl">AC kamu sudah beres</h2>
+                            <p class="mt-2 text-ink-soft">Pesanan ditutup. Terima kasih sudah memakai Sejuk.</p>
+                        </div>
+                        <div class="mt-6 rounded-2xl bg-paper p-5">
+                            <dl class="space-y-2.5 text-sm">
+                                <div class="flex justify-between gap-4"><dt class="text-mute">Layanan</dt><dd class="text-right font-medium">{{ $order->service->name }}</dd></div>
+                                <div class="flex justify-between gap-4"><dt class="text-mute">Teknisi</dt><dd class="text-right font-medium">{{ $technician?->business_name }}</dd></div>
+                                <div class="flex justify-between gap-4"><dt class="text-mute">Dikerjakan</dt><dd class="text-right font-medium">{{ $scheduleDate->translatedFormat('l, j F') }}, {{ $scheduleWindow->range() }} WIB</dd></div>
+                            </dl>
+                            <ul class="mt-4 space-y-2 border-t border-line pt-4 text-sm">
+                                @foreach ($order->costItems as $item)
+                                    <li wire:key="done-{{ $item->id }}" class="flex justify-between gap-4">
+                                        <span class="text-ink-soft">{{ $item->label }}</span>
+                                        <span class="font-medium tnum">{{ rupiah($item->amount) }}</span>
+                                    </li>
+                                @endforeach
+                            </ul>
+                            <div class="mt-4 flex items-center justify-between border-t border-line pt-4">
+                                <span class="flex items-center gap-2 font-bold">Total <span class="rounded-full bg-leaf-soft px-2 py-0.5 text-[11px] font-bold text-leaf">Lunas</span></span>
+                                <span class="text-2xl font-extrabold tnum">{{ rupiah($order->final_total) }}</span>
+                            </div>
+                            @if ($paid)
+                                <dl class="mt-4 space-y-2.5 border-t border-line pt-4 text-sm">
+                                    <div class="flex justify-between gap-4"><dt class="text-mute">Metode</dt><dd class="text-right font-medium">{{ $paid->method->label() }}</dd></div>
+                                    <div class="flex justify-between gap-4"><dt class="text-mute">Dibayar</dt><dd class="text-right font-medium tnum">{{ $paid->paid_at?->translatedFormat('j M, H.i') }}</dd></div>
+                                    <div class="flex justify-between gap-4"><dt class="text-mute">Status dana</dt><dd class="text-right font-medium">Diteruskan ke {{ $firstName }}</dd></div>
+                                </dl>
+                            @endif
+                        </div>
+                        <div class="mt-8 grid gap-3 sm:grid-cols-2">
+                            @if (Route::has('reviews.create'))
+                                <x-button size="lg" icon="star" :href="route('reviews.create', $order)" wire:navigate>Beri ulasan</x-button>
+                            @endif
+                            <x-button size="lg" variant="secondary" icon-trailing="arrow-right" :href="route('home')" wire:navigate>Ke beranda</x-button>
+                        </div>
+                    </x-order.panel>
+                    @break
+
                 @case(OrderStatus::Dibatalkan)
                     @php $finalRejected = $order->cancelled_reason === OrderWorkflow::REASON_FINAL_COST_REJECTED; @endphp
                     <x-order.panel icon="circle-x" icon-class="text-ink-soft"
@@ -485,7 +614,7 @@ new #[Layout('layouts::customer')] class extends Component {
                         'Estimasi' => $order->estimate_min ? rupiah($order->estimate_min).' – '.rupiah($order->estimate_max) : null,
                         'Garansi' => $order->warranty ? config('sejuk.warranty.days').' hari' : null,
                         'Biaya final' => $order->final_total !== null && ! in_array($status, [OrderStatus::Terjadwal, OrderStatus::Dibatalkan], true) ? rupiah($order->final_total) : null,
-                        'Pembayaran' => $order->paidPayment() ? $order->paidPayment()->method->label().' · '.($order->fund_status?->label() ?? 'Lunas') : null,
+                        'Pembayaran' => $order->paidPayment() ? $order->paidPayment()->method->label().' · '.($order->fund_status === \App\Enums\FundStatus::Ditahan ? 'Ditahan Sejuk' : 'Diteruskan') : null,
                     ]) as $label => $value)
                         <div wire:key="row-{{ $loop->index }}" class="flex justify-between gap-4">
                             <dt class="shrink-0 text-mute">{{ $label }}</dt>

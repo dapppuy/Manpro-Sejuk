@@ -11,3 +11,4 @@ Artisan::command('inspire', function () {
 Schedule::command('orders:expire-responses')->everyMinute()->withoutOverlapping();
 Schedule::command('orders:send-reminders')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('payments:sync')->everyMinute()->withoutOverlapping();
+Schedule::command('orders:auto-complete')->everyFiveMinutes()->withoutOverlapping();

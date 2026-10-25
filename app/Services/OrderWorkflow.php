@@ -230,6 +230,92 @@ class OrderWorkflow
     }
 
     /**
+     * L-08 (technician side): upload before/after photos and mark the job done.
+     */
+    public function submitProof(Order $order, TechnicianProfile $technician, UploadedFile $before, UploadedFile $after, ?string $note): void
+    {
+        $this->ensureStatus($order, [OrderStatus::Dikerjakan, OrderStatus::PerbaikanUlang]);
+        $this->ensureAssigned($order, $technician);
+
+        DB::transaction(function () use ($order, $technician, $before, $after, $note) {
+            $round = $order->rework_count + 1;
+            $directory = "work-proofs/{$order->id}";
+
+            $order->workProofs()->create([
+                'round' => $round,
+                'before_path' => $before->store($directory, 'local'),
+                'after_path' => $after->store($directory, 'local'),
+                'note' => $note,
+            ]);
+
+            $order->proof_submitted_at = now();
+            $this->transition($order, OrderStatus::MenungguKonfirmasi, $technician->user, $round > 1 ? 'Bukti baru setelah perbaikan ulang' : null);
+        });
+    }
+
+    /**
+     * "Selesai, AC sudah beres": the order closes and the held funds go to the technician.
+     */
+    public function confirmCompletion(Order $order, User $customer): void
+    {
+        $this->ensureStatus($order, [OrderStatus::MenungguKonfirmasi]);
+
+        DB::transaction(fn () => $this->complete($order, $customer, 'Dikonfirmasi pelanggan'));
+    }
+
+    /**
+     * "Masih bermasalah": the technician fixes it again at no extra cost while funds stay held.
+     * Past the rework limit the order goes to admin review instead.
+     */
+    public function requestRework(Order $order, User $customer, ?string $complaint): void
+    {
+        $this->ensureStatus($order, [OrderStatus::MenungguKonfirmasi]);
+
+        DB::transaction(function () use ($order, $customer, $complaint) {
+            $order->workProofs()->where('round', $order->rework_count + 1)->update([
+                'rejected_at' => now(),
+                'complaint' => $complaint,
+            ]);
+
+            $order->rework_count++;
+            $order->proof_submitted_at = null;
+
+            $overLimit = $order->rework_count > (int) config('sejuk.max_rework');
+            $this->transition($order, $overLimit ? OrderStatus::Sengketa : OrderStatus::PerbaikanUlang, $customer, $complaint);
+        });
+    }
+
+    /**
+     * Close orders whose customer did not respond within the confirmation window.
+     */
+    public function autoCompleteOverdue(): int
+    {
+        $overdue = Order::query()
+            ->where('status', OrderStatus::MenungguKonfirmasi)
+            ->where('proof_submitted_at', '<=', now()->subHours((int) config('sejuk.auto_complete_hours')))
+            ->get();
+
+        $overdue->each(fn (Order $order) => DB::transaction(
+            fn () => $this->complete($order, null, 'Selesai otomatis, tidak ada konfirmasi dalam '.config('sejuk.auto_complete_hours').' jam'),
+        ));
+
+        return $overdue->count();
+    }
+
+    private function complete(Order $order, ?User $actor, string $note): void
+    {
+        $order->fill([
+            'fund_status' => FundStatus::Diteruskan,
+            'commission_amount' => (int) round((int) $order->final_total * (int) config('sejuk.commission_percent') / 100),
+            'completed_at' => now(),
+        ]);
+
+        $this->transition($order, OrderStatus::Selesai, $actor, $note);
+
+        $order->technician?->increment('jobs_count');
+    }
+
+    /**
      * The customer declines the final cost: work does not start and the order closes.
      */
     public function rejectFinalCost(Order $order, User $customer): void

@@ -62,6 +62,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property-read Service $service
  * @property-read Collection<int, OrderOffer> $offers
  * @property-read Collection<int, OrderMedia> $media
+ * @property-read Collection<int, OrderCostItem> $costItems
+ * @property-read Collection<int, WorkProof> $workProofs
+ * @property-read Collection<int, Payment> $payments
  */
 #[Fillable([
     'customer_id', 'technician_id', 'service_id', 'ac_capacity', 'ac_brand', 'ac_brand_other', 'address',
@@ -171,6 +174,35 @@ class Order extends Model
     public function offers(): HasMany
     {
         return $this->hasMany(OrderOffer::class);
+    }
+
+    /**
+     * @return HasMany<WorkProof, $this>
+     */
+    public function workProofs(): HasMany
+    {
+        return $this->hasMany(WorkProof::class)->orderBy('round');
+    }
+
+    public function latestProof(): ?WorkProof
+    {
+        return $this->workProofs->sortByDesc('round')->first();
+    }
+
+    /**
+     * When the order closes by itself if the customer does not confirm.
+     */
+    public function autoCompletesAt(): ?CarbonImmutable
+    {
+        return $this->proof_submitted_at?->addHours((int) config('sejuk.auto_complete_hours'));
+    }
+
+    /**
+     * What the technician receives once funds are forwarded.
+     */
+    public function technicianPayout(): int
+    {
+        return max(0, (int) $this->final_total - (int) $this->commission_amount);
     }
 
     /**
