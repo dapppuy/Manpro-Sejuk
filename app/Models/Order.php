@@ -6,7 +6,9 @@ use App\Enums\AcCapacity;
 use App\Enums\FundStatus;
 use App\Enums\OfferStatus;
 use App\Enums\OrderStatus;
+use App\Enums\PaymentStatus;
 use App\Enums\TimeWindow;
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Database\Factories\OrderFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -17,7 +19,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Carbon\CarbonImmutable;
 
 /**
  * @property int $id
@@ -170,6 +171,22 @@ class Order extends Model
     public function offers(): HasMany
     {
         return $this->hasMany(OrderOffer::class);
+    }
+
+    /**
+     * @return HasMany<Payment, $this>
+     */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
+    }
+
+    /**
+     * The attempt that settled this order, if any.
+     */
+    public function paidPayment(): ?Payment
+    {
+        return $this->payments->firstWhere('status', PaymentStatus::Paid);
     }
 
     /**

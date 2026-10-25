@@ -105,7 +105,7 @@ it('moves to payment when the customer approves the final cost', function () {
 
     Livewire::test('pages::orders.show', ['order' => $this->order->refresh()])
         ->call('approveFinalCost')
-        ->assertSee('Biaya final disetujui');
+        ->assertSee('Bayar biaya final');
 
     expect($this->order->refresh()->status)->toBe(OrderStatus::MenungguPembayaran);
 });

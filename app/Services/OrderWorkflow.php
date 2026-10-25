@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\FundStatus;
 use App\Enums\MediaType;
 use App\Enums\OfferStatus;
 use App\Enums\OrderStatus;
@@ -215,6 +216,17 @@ class OrderWorkflow
         $this->ensureStatus($order, [OrderStatus::MenungguPersetujuanBiaya]);
 
         $this->transition($order, OrderStatus::MenungguPembayaran, $customer);
+    }
+
+    /**
+     * Payment confirmed by Midtrans: the money is held by Sejuk and the technician starts work.
+     */
+    public function markPaid(Order $order, ?string $note = null): void
+    {
+        $this->ensureStatus($order, [OrderStatus::MenungguPembayaran]);
+
+        $order->fund_status = FundStatus::Ditahan;
+        $this->transition($order, OrderStatus::Dikerjakan, null, $note ?? 'Pembayaran diterima, dana ditahan Sejuk');
     }
 
     /**

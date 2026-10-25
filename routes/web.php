@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\TechnicianDocumentController;
+use App\Http\Controllers\MidtransWebhookController;
 use App\Http\Controllers\OrderMediaController;
 use App\Http\Middleware\EnsureTechnicianIsApproved;
 use Illuminate\Http\RedirectResponse;
@@ -10,6 +11,8 @@ use Illuminate\Support\Facades\Route;
 Route::livewire('/', 'pages::home')->name('home');
 Route::livewire('cari', 'pages::search')->name('search');
 Route::livewire('teknisi/{technician}', 'pages::technicians.show')->name('technicians.show');
+
+Route::post('webhooks/midtrans', MidtransWebhookController::class)->name('webhooks.midtrans');
 
 Route::middleware(['auth'])->group(function () {
     Route::get('dashboard', fn (Request $request): RedirectResponse => redirect($request->user()->homeRoute()))->name('dashboard');

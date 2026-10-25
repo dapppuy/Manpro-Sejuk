@@ -5,7 +5,11 @@ use App\Enums\OrderStatus;
 use App\Exceptions\InvalidOrderTransition;
 use App\Models\Order;
 use App\Models\TechnicianProfile;
+use App\Enums\PaymentMethod;
+use App\Models\Payment;
+use App\Services\Midtrans\MidtransException;
 use App\Services\OrderWorkflow;
+use App\Services\PaymentService;
 use Flux\Flux;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Gate;
@@ -17,6 +21,8 @@ new #[Layout('layouts::customer')] class extends Component {
     public Order $order;
 
     public bool $confirmRejectFinal = false;
+
+    public ?string $paymentMethod = null;
 
     public function mount(Order $order): void
     {
@@ -33,7 +39,62 @@ new #[Layout('layouts::customer')] class extends Component {
     {
         $this->order->refresh();
         $this->expireIfOverdue();
-        unset($this->backupCandidates);
+        $this->syncPendingPayment(onlyIfStale: true);
+        unset($this->backupCandidates, $this->pendingPayment, $this->lastPaymentAttempt);
+    }
+
+    public function startPayment(PaymentService $payments): void
+    {
+        $method = PaymentMethod::tryFrom((string) $this->paymentMethod);
+
+        if ($method === null) {
+            Flux::toast(variant: 'danger', text: 'Pilih metode pembayaran dulu.');
+
+            return;
+        }
+
+        try {
+            $payments->start($this->order, $method);
+        } catch (InvalidOrderTransition|MidtransException $exception) {
+            Flux::toast(variant: 'danger', text: $exception->getMessage());
+        }
+
+        $this->refreshOrder();
+    }
+
+    public function changePaymentMethod(PaymentService $payments): void
+    {
+        if ($this->pendingPayment !== null) {
+            $payments->cancel($this->pendingPayment);
+        }
+
+        $this->refreshOrder();
+    }
+
+    /**
+     * "Saya sudah bayar": check with Midtrans right away instead of waiting for the webhook.
+     */
+    public function checkPayment(): void
+    {
+        $this->syncPendingPayment(onlyIfStale: false);
+        $this->order->refresh();
+        unset($this->pendingPayment, $this->lastPaymentAttempt);
+
+        if ($this->order->status === OrderStatus::MenungguPembayaran && $this->pendingPayment !== null) {
+            Flux::toast(text: 'Pembayaran belum kami terima. Halaman ini akan berpindah otomatis setelah diterima.');
+        }
+    }
+
+    #[Computed]
+    public function pendingPayment(): ?Payment
+    {
+        return app(PaymentService::class)->pendingPayment($this->order);
+    }
+
+    #[Computed]
+    public function lastPaymentAttempt(): ?Payment
+    {
+        return $this->order->payments()->latest('id')->first();
     }
 
     public function requestBackup(OrderWorkflow $workflow): void
@@ -118,7 +179,7 @@ new #[Layout('layouts::customer')] class extends Component {
 
     public function render(): \Illuminate\Contracts\View\View
     {
-        $this->order->loadMissing(['technician.user', 'service', 'media', 'offers', 'costItems']);
+        $this->order->loadMissing(['technician.user', 'service', 'media', 'offers', 'costItems', 'payments']);
 
         return $this->view()->title('Pesanan #'.$this->order->code);
     }
@@ -132,6 +193,22 @@ new #[Layout('layouts::customer')] class extends Component {
         }
 
         $this->refreshOrder();
+    }
+
+    private function syncPendingPayment(bool $onlyIfStale): void
+    {
+        $payment = app(PaymentService::class)->pendingPayment($this->order);
+
+        if ($payment === null) {
+            return;
+        }
+
+        if ($onlyIfStale && $payment->synced_at !== null && $payment->synced_at->gt(now()->subSeconds(15)) && ! $payment->isOverdue()) {
+            return;
+        }
+
+        app(PaymentService::class)->sync($payment);
+        $this->order->refresh();
     }
 
     private function expireIfOverdue(): void
@@ -343,8 +420,15 @@ new #[Layout('layouts::customer')] class extends Component {
                     @break
 
                 @case(OrderStatus::MenungguPembayaran)
-                    <x-order.panel icon="credit-card" title="Biaya final disetujui" :sub="'Total '.rupiah($order->final_total).'. Bayar online lewat QRIS, virtual account, atau e-wallet. Dana ditahan Sejuk sampai kamu konfirmasi pekerjaan selesai.'">
-                        <p class="mt-5 rounded-2xl bg-sun-soft px-4 py-3 text-sm text-sun-ink">Halaman pembayaran sedang disiapkan.</p>
+                    <x-order.payment :order="$order" :payment="$this->pendingPayment" :last-attempt="$this->lastPaymentAttempt" :selected-method="$paymentMethod" />
+                    @break
+
+                @case(OrderStatus::Dikerjakan)
+                    <x-order.panel tone="frost" icon="hammer" title="Sedang dikerjakan"
+                        :sub="'Pembayaran diterima dan ditahan Sejuk. '.$firstName.' sedang mengerjakan AC-mu, dan kamu akan diminta mengecek hasilnya sebelum dana diteruskan.'" />
+                    <x-order.panel>
+                        <p class="font-bold">Setelah pekerjaan selesai</p>
+                        <p class="mt-1 text-sm text-ink-soft">Teknisi mengunggah foto sebelum dan sesudah. Kamu memeriksa hasilnya di halaman ini sebelum dana diteruskan.</p>
                     </x-order.panel>
                     @break
 
@@ -401,6 +485,7 @@ new #[Layout('layouts::customer')] class extends Component {
                         'Estimasi' => $order->estimate_min ? rupiah($order->estimate_min).' – '.rupiah($order->estimate_max) : null,
                         'Garansi' => $order->warranty ? config('sejuk.warranty.days').' hari' : null,
                         'Biaya final' => $order->final_total !== null && ! in_array($status, [OrderStatus::Terjadwal, OrderStatus::Dibatalkan], true) ? rupiah($order->final_total) : null,
+                        'Pembayaran' => $order->paidPayment() ? $order->paidPayment()->method->label().' · '.($order->fund_status?->label() ?? 'Lunas') : null,
                     ]) as $label => $value)
                         <div wire:key="row-{{ $loop->index }}" class="flex justify-between gap-4">
                             <dt class="shrink-0 text-mute">{{ $label }}</dt>

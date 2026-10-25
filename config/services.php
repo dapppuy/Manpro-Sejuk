@@ -28,6 +28,12 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'midtrans' => [
+        'server_key' => env('MIDTRANS_SERVER_KEY'),
+        'client_key' => env('MIDTRANS_CLIENT_KEY'),
+        'is_production' => (bool) env('MIDTRANS_IS_PRODUCTION', false),
+    ],
+
     'nominatim' => [
         'url' => env('NOMINATIM_URL', 'https://nominatim.openstreetmap.org'),
         'user_agent' => env('NOMINATIM_USER_AGENT', 'Sejuk/1.0 (sejuk.test)'),
