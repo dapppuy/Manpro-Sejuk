@@ -4,11 +4,17 @@ namespace App\Providers;
 
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
+use App\Http\Responses\RoleHomeResponse;
+use App\Models\User;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use Laravel\Fortify\Contracts\LoginResponse;
+use Laravel\Fortify\Contracts\RegisterResponse;
+use Laravel\Fortify\Contracts\TwoFactorLoginResponse;
 use Laravel\Fortify\Fortify;
 
 class FortifyServiceProvider extends ServiceProvider
@@ -18,7 +24,9 @@ class FortifyServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(LoginResponse::class, RoleHomeResponse::class);
+        $this->app->singleton(RegisterResponse::class, RoleHomeResponse::class);
+        $this->app->singleton(TwoFactorLoginResponse::class, RoleHomeResponse::class);
     }
 
     /**
@@ -28,6 +36,7 @@ class FortifyServiceProvider extends ServiceProvider
     {
         $this->configureActions();
         $this->configureViews();
+        $this->configureAuthentication();
         $this->configureRateLimiting();
     }
 
@@ -50,6 +59,22 @@ class FortifyServiceProvider extends ServiceProvider
         Fortify::registerView(fn () => view('pages::auth.register'));
         Fortify::resetPasswordView(fn () => view('pages::auth.reset-password'));
         Fortify::requestPasswordResetLinkView(fn () => view('pages::auth.forgot-password'));
+    }
+
+    /**
+     * Allow signing in with either an email address or a phone number.
+     */
+    private function configureAuthentication(): void
+    {
+        Fortify::authenticateUsing(function (Request $request): ?User {
+            $login = Str::lower(trim((string) $request->input(Fortify::username())));
+
+            $user = Str::contains($login, '@')
+                ? User::where('email', $login)->first()
+                : User::where('phone', User::normalizePhone($login))->first();
+
+            return $user && Hash::check((string) $request->input('password'), $user->password) ? $user : null;
+        });
     }
 
     /**

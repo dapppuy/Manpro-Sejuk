@@ -22,6 +22,24 @@ trait ProfileValidationRules
     }
 
     /**
+     * Get the validation rules used to validate Indonesian phone numbers.
+     * Normalize the value with User::normalizePhone() before validating.
+     *
+     * @return array<int, ValidationRule|array<mixed>|string>
+     */
+    protected function phoneRules(?int $userId = null): array
+    {
+        return [
+            'required',
+            'string',
+            'regex:/^08\d{8,12}$/',
+            $userId === null
+                ? Rule::unique(User::class, 'phone')
+                : Rule::unique(User::class, 'phone')->ignore($userId),
+        ];
+    }
+
+    /**
      * Get the validation rules used to validate user names.
      *
      * @return array<int, ValidationRule|array<mixed>|string>

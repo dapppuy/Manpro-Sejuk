@@ -7,10 +7,14 @@ test('guests are redirected to the login page', function () {
     $response->assertRedirect(route('login'));
 });
 
-test('authenticated users can visit the dashboard', function () {
-    $user = User::factory()->create();
-    $this->actingAs($user);
+test('dashboard sends each role to its own portal', function (string $state, string $routeName) {
+    $user = User::factory()->{$state}()->create();
 
-    $response = $this->get(route('dashboard'));
-    $response->assertOk();
-});
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertRedirect(route($routeName));
+})->with([
+    'customer' => ['customer', 'home'],
+    'technician' => ['technician', 'mitra.dashboard'],
+    'admin' => ['admin', 'admin.dashboard'],
+]);
