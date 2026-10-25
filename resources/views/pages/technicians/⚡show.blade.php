@@ -8,23 +8,22 @@ use App\Support\CustomerLocation;
 use Illuminate\Database\Eloquent\Collection;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 
 new #[Layout('layouts::customer')] class extends Component {
     public TechnicianProfile $technician;
 
-    public int $reviewLimit = 5;
+    #[Url(as: 'layanan')]
+    public string $service = '';
+
+    public bool $showAllReviews = false;
 
     public function mount(TechnicianProfile $technician): void
     {
         abort_unless($technician->verification_status === VerificationStatus::Approved && $technician->is_active, 404);
 
         $this->technician = $technician->load(['user', 'services', 'prices.service', 'serviceAreas', 'brands', 'photos', 'availabilities']);
-    }
-
-    public function showMoreReviews(): void
-    {
-        $this->reviewLimit += 5;
     }
 
     #[Computed]
@@ -41,7 +40,11 @@ new #[Layout('layouts::customer')] class extends Component {
     #[Computed]
     public function reviews(): Collection
     {
-        return $this->technician->reviews()->visible()->with('customer')->latest()->limit($this->reviewLimit)->get();
+        return $this->technician->reviews()->visible()
+            ->with(['customer', 'order.service'])
+            ->latest()
+            ->limit($this->showAllReviews ? 50 : 3)
+            ->get();
     }
 
     #[Computed]
@@ -53,7 +56,7 @@ new #[Layout('layouts::customer')] class extends Component {
     public function requestUrl(): string
     {
         return Route::has('requests.create')
-            ? route('requests.create', ['technician' => $this->technician])
+            ? route('requests.create', array_filter(['technician' => $this->technician, 'layanan' => $this->service ?: null]))
             : route('login');
     }
 
@@ -66,193 +69,180 @@ new #[Layout('layouts::customer')] class extends Component {
 @php
     $technician = $this->technician;
     $slot = $technician->nextSlot();
-    $pricesByService = $technician->prices->sortBy(fn ($price) => [$price->service->sort_order, $price->price_min])->groupBy('service_id');
+    $today = $technician->isAvailableToday();
+    $prices = $technician->prices->sortBy(fn ($price) => [$price->service->sort_order, $price->price_min]);
+    $slotLabel = $slot
+        ? ($slot['date']->isToday() ? 'Hari ini' : ($slot['date']->isTomorrow() ? 'Besok' : $slot['date']->translatedFormat('l, j F'))).', '.str($slot['window']->range())->before('–')
+        : 'Belum ada slot 7 hari ke depan';
 @endphp
 
-<div class="mx-auto max-w-7xl px-4 pt-6 pb-28 sm:px-6 lg:pt-10 lg:pb-10">
-    <a href="{{ route('search') }}" wire:navigate class="inline-flex items-center gap-1.5 text-sm font-semibold text-mute hover:text-ink">
+<div class="mx-auto max-w-7xl px-4 pt-6 pb-28 sm:px-6 sm:pt-8 lg:pb-8">
+    <a href="{{ route('search', array_filter(['layanan' => $service ?: null])) }}" wire:navigate class="mb-6 inline-flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink">
         <flux:icon.arrow-left class="size-4" /> Kembali ke hasil pencarian
     </a>
 
-    <div class="mt-4 grid gap-6 lg:grid-cols-[1fr_340px]">
-        <div class="min-w-0 space-y-6">
-            {{-- Header --}}
-            <x-card class="rise">
-                <div class="flex flex-col gap-5 sm:flex-row">
-                    <x-avatar :name="$technician->user->name" size="xl" />
-                    <div class="min-w-0 flex-1">
-                        <div class="flex flex-wrap items-center gap-2">
-                            <x-badge-chip :badge="$technician->badge" />
-                            @if ($technician->isPromotedNow()) <x-promo-label /> @endif
-                        </div>
-                        <h1 class="mt-2 text-2xl font-extrabold tracking-tight sm:text-3xl">{{ $technician->business_name }}</h1>
-                        <p class="text-mute">Pemilik: {{ $technician->user->name }}</p>
-                        <div class="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-ink-soft">
-                            <x-rating :value="$technician->rating_avg" :count="$technician->reviews_count" />
-                            <span class="inline-flex items-center gap-1.5 tnum"><flux:icon.navigation class="size-4 text-mute" /> {{ number_format($this->distanceKm, 1, ',', '') }} km dari lokasimu</span>
-                        </div>
+    <div class="grid gap-10 lg:grid-cols-[1fr_360px]">
+        <div class="min-w-0 space-y-10">
+            <header class="flex flex-col gap-6 sm:flex-row sm:items-end">
+                <x-avatar :name="$technician->user->name" :src="$technician->user->avatarUrl()" class="!size-32 rounded-3xl !text-4xl sm:!size-44" />
+                <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                        @if ($technician->isPromotedNow()) <x-promo-label /> @endif
+                        <x-badge-chip :badge="$technician->badge" size="md" />
+                    </div>
+                    <h1 class="mt-3 text-3xl font-extrabold tracking-tight sm:text-4xl">{{ $technician->business_name }}</h1>
+                    <p class="mt-1 text-ink-soft">{{ $technician->user->name }}</p>
+                    <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+                        <x-rating :value="$technician->rating_avg" :count="$technician->reviews_count" />
+                        <span class="inline-flex items-center gap-1.5 text-ink-soft tnum"><flux:icon.map-pin class="size-4" /> {{ number_format($this->distanceKm, 1, ',', '.') }} km darimu</span>
+                        <span class="inline-flex items-center gap-1.5 text-ink-soft tnum"><flux:icon.briefcase class="size-4" /> {{ $technician->years_experience }} tahun · {{ $technician->jobs_count }} pekerjaan</span>
+                        @if ($technician->avg_response_minutes)
+                            <span class="inline-flex items-center gap-1.5 text-ink-soft tnum"><flux:icon.message-square-text class="size-4" /> Membalas ±{{ $technician->avg_response_minutes }} menit</span>
+                        @endif
                     </div>
                 </div>
+            </header>
 
-                <dl class="mt-6 grid grid-cols-3 gap-2 sm:gap-3">
-                    <div class="rounded-2xl bg-paper p-3 sm:p-4">
-                        <dt class="text-xs text-mute">Pengalaman</dt>
-                        <dd class="mt-1 text-lg font-extrabold tnum">{{ $technician->years_experience }} th</dd>
-                    </div>
-                    <div class="rounded-2xl bg-paper p-3 sm:p-4">
-                        <dt class="text-xs text-mute">Pekerjaan</dt>
-                        <dd class="mt-1 text-lg font-extrabold tnum">{{ $technician->jobs_count }}</dd>
-                    </div>
-                    <div class="rounded-2xl bg-paper p-3 sm:p-4">
-                        <dt class="text-xs text-mute">Rata-rata balas</dt>
-                        <dd class="mt-1 text-lg font-extrabold tnum">{{ $technician->avg_response_minutes ? '±'.$technician->avg_response_minutes.' mnt' : '–' }}</dd>
-                    </div>
-                </dl>
+            @if ($technician->bio)
+                <p class="max-w-2xl text-lg leading-relaxed text-ink-soft">{{ $technician->bio }}</p>
+            @endif
 
-                @if ($technician->bio)
-                    <p class="mt-5 leading-relaxed text-ink-soft">{{ $technician->bio }}</p>
-                @endif
-            </x-card>
+            <section id="harga">
+                <h2 class="text-xl font-bold">Daftar harga acuan</h2>
+                <p class="mt-1 text-sm text-mute">Harga acuan dari teknisi. Estimasi untuk AC-mu dikirim setelah formulir diisi.</p>
+                <x-card class="mt-4 overflow-x-auto">
+                    <table class="w-full min-w-[480px] text-left text-sm">
+                        <thead class="bg-paper text-xs tracking-wider text-mute uppercase">
+                            <tr>
+                                <th class="px-5 py-3 font-semibold">Layanan</th>
+                                <th class="px-5 py-3 font-semibold">Keterangan</th>
+                                <th class="px-5 py-3 text-right font-semibold">Kisaran</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($prices as $price)
+                                <tr wire:key="price-{{ $price->id }}" class="border-t border-line">
+                                    <td class="px-5 py-3.5 font-semibold">{{ $price->service->name }}</td>
+                                    <td class="px-5 py-3.5 text-ink-soft">{{ $price->note }}</td>
+                                    <td class="px-5 py-3.5 text-right font-semibold whitespace-nowrap tnum">{{ rupiah($price->price_min) }} – {{ rupiah($price->price_max) }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </x-card>
+            </section>
 
-            {{-- Gallery --}}
-            <x-card>
-                <h2 class="text-lg font-bold">Galeri kerja</h2>
-                @if ($technician->photos->isNotEmpty())
-                    <div class="no-scrollbar -mx-5 mt-4 flex snap-x gap-3 overflow-x-auto px-5 sm:mx-0 sm:grid sm:grid-cols-3 sm:px-0">
-                        @foreach ($technician->photos as $photo)
-                            <img wire:key="photo-{{ $photo->id }}" src="{{ $photo->url() }}" alt="{{ $photo->caption ?? 'Hasil kerja '.$technician->business_name }}" loading="lazy"
-                                class="aspect-[4/3] w-64 shrink-0 snap-start rounded-2xl object-cover ring-1 ring-line sm:w-full" />
-                        @endforeach
-                    </div>
-                @else
-                    <div class="mt-4 flex items-center gap-3 rounded-2xl bg-paper px-4 py-5 text-sm text-mute">
-                        <flux:icon.images class="size-5 shrink-0" />
-                        Teknisi belum mengunggah foto hasil kerja.
-                    </div>
-                @endif
-            </x-card>
-
-            {{-- Prices --}}
-            <x-card id="harga">
-                <div class="flex items-baseline justify-between gap-3">
-                    <h2 class="text-lg font-bold">Harga acuan</h2>
-                    <p class="text-xs text-mute">Harga final mengikuti hasil pengecekan, dan selalu kamu setujui dulu.</p>
-                </div>
-                <div class="mt-4 divide-y divide-line">
-                    @foreach ($pricesByService as $prices)
-                        <div wire:key="price-group-{{ $prices->first()->service_id }}" class="py-4 first:pt-0 last:pb-0">
-                            <p class="flex items-center gap-2 font-semibold text-ink">
-                                <flux:icon :icon="$prices->first()->service->icon()" class="size-4 text-ice" />
-                                {{ $prices->first()->service->name }}
-                            </p>
-                            <ul class="mt-2 space-y-1.5">
-                                @foreach ($prices as $price)
-                                    <li wire:key="price-{{ $price->id }}" class="flex items-baseline justify-between gap-4 text-sm">
-                                        <span class="text-ink-soft">{{ $price->note }}</span>
-                                        <span class="shrink-0 font-bold text-ink tnum">{{ rupiah_range($price->price_min, $price->price_max) }}</span>
-                                    </li>
-                                @endforeach
-                            </ul>
-                        </div>
-                    @endforeach
-                </div>
-            </x-card>
-
-            {{-- Brands & areas --}}
-            <div class="grid gap-6 sm:grid-cols-2">
-                <x-card>
-                    <h2 class="text-lg font-bold">Merek yang dikuasai</h2>
+            <section class="grid gap-8 sm:grid-cols-2">
+                <div>
+                    <h2 class="text-xl font-bold">Brand AC yang dikuasai</h2>
                     <div class="mt-3 flex flex-wrap gap-2">
                         @foreach ($technician->brands as $brand)
-                            <x-pill wire:key="brand-{{ $brand->id }}">{{ $brand->brand }}</x-pill>
+                            <span wire:key="brand-{{ $brand->id }}" class="rounded-full bg-white px-3 py-1.5 text-sm font-medium ring-1 ring-line">{{ $brand->brand }}</span>
                         @endforeach
                     </div>
-                </x-card>
-                <x-card>
-                    <h2 class="text-lg font-bold">Area layanan</h2>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold">Area layanan</h2>
                     <div class="mt-3 flex flex-wrap gap-2">
                         @foreach ($technician->serviceAreas as $area)
-                            <x-pill wire:key="area-{{ $area->id }}" tone="ice" icon="map-pin">{{ $area->area_name }}</x-pill>
+                            <span wire:key="area-{{ $area->id }}" class="rounded-full bg-white px-3 py-1.5 text-sm font-medium ring-1 ring-line">{{ $area->area_name }}</span>
                         @endforeach
                     </div>
-                    <p class="mt-3 text-xs text-mute">Radius layanan hingga {{ $technician->service_radius_km }} km.</p>
-                </x-card>
-            </div>
-
-            {{-- Reviews --}}
-            <x-card>
-                <div class="flex items-center justify-between gap-3">
-                    <h2 class="text-lg font-bold">Ulasan pelanggan</h2>
-                    <x-rating :value="$technician->rating_avg" :count="$this->visibleReviewsCount" />
                 </div>
-                <div class="mt-4 space-y-4">
+            </section>
+
+            <section class="flex items-start gap-4 rounded-2xl bg-white p-5 ring-1 ring-line">
+                <flux:icon.shield-check class="mt-0.5 size-5 shrink-0 text-ice" />
+                <div class="flex-1">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <p class="font-bold">Status verifikasi: {{ $technician->badge->label() }}</p>
+                        <x-badge-levels :badge="$technician->badge" />
+                    </div>
+                    <p class="mt-1 text-sm text-ink-soft">{{ $technician->badge->description() }}.</p>
+                </div>
+            </section>
+
+            <section>
+                <h2 class="text-xl font-bold">Galeri hasil kerja</h2>
+                @if ($technician->photos->isNotEmpty())
+                    <div class="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
+                        @foreach ($technician->photos as $photo)
+                            <img wire:key="photo-{{ $photo->id }}" src="{{ $photo->url() }}" alt="{{ $photo->caption ?? 'Hasil kerja '.$technician->business_name.' '.$loop->iteration }}" loading="lazy" class="aspect-[4/3] w-full rounded-2xl object-cover" />
+                        @endforeach
+                    </div>
+                @else
+                    <p class="mt-4 flex items-center gap-3 rounded-2xl bg-white px-5 py-4 text-sm text-mute ring-1 ring-line">
+                        <flux:icon.images class="size-5 shrink-0" /> Teknisi belum mengunggah foto hasil kerja.
+                    </p>
+                @endif
+            </section>
+
+            <section id="ulasan">
+                <div class="flex flex-wrap items-end justify-between gap-4">
+                    <div>
+                        <h2 class="text-xl font-bold">Ulasan pelanggan</h2>
+                        <p class="mt-1 text-sm text-mute">Pengalaman pelanggan yang pernah memakai jasa {{ $technician->business_name }}.</p>
+                    </div>
+                    <div class="flex items-center gap-2 rounded-full bg-white px-3 py-1.5 ring-1 ring-line">
+                        <x-rating :value="$technician->rating_avg" />
+                        <span class="text-xs text-mute tnum">· {{ $technician->reviews_count }} ulasan</span>
+                    </div>
+                </div>
+                <div class="mt-4 grid gap-3">
                     @forelse ($this->reviews as $review)
-                        <article wire:key="review-{{ $review->id }}" class="rounded-2xl bg-paper p-4">
-                            <div class="flex items-center justify-between gap-3">
+                        <x-card wire:key="review-{{ $review->id }}" class="p-5">
+                            <div class="flex flex-wrap items-start justify-between gap-3">
                                 <div class="flex items-center gap-3">
-                                    <x-avatar :name="$review->customer->name" size="sm" />
+                                    <x-avatar :name="$review->customer->name" class="rounded-full" />
                                     <div>
-                                        <p class="text-sm font-semibold">{{ $review->customer->name }}</p>
-                                        <p class="text-xs text-mute">{{ $review->created_at?->translatedFormat('j F Y') }}</p>
+                                        <p class="font-bold">{{ $review->customer->name }}</p>
+                                        <p class="text-xs text-mute">
+                                            @if ($review->order?->service) {{ $review->order->service->name }} · @endif
+                                            {{ $review->created_at?->diffForHumans() }}
+                                        </p>
                                     </div>
                                 </div>
-                                <span class="flex gap-0.5" aria-label="Rating {{ $review->rating }} dari 5">
-                                    @foreach (range(1, 5) as $star)
-                                        <flux:icon.star wire:key="star-{{ $review->id }}-{{ $star }}" @class(['size-4', 'fill-sun text-sun' => $star <= $review->rating, 'text-line' => $star > $review->rating]) />
-                                    @endforeach
-                                </span>
+                                <x-rating :value="$review->rating" />
                             </div>
                             @if ($review->comment)
-                                <p class="mt-3 text-sm leading-relaxed text-ink-soft">{{ $review->comment }}</p>
+                                <p class="mt-4 text-sm leading-relaxed text-ink-soft">{{ $review->comment }}</p>
                             @endif
-                        </article>
+                        </x-card>
                     @empty
-                        <p class="rounded-2xl bg-paper px-4 py-5 text-sm text-mute">Belum ada ulasan.</p>
+                        <x-card class="p-5 text-sm text-mute">Belum ada ulasan.</x-card>
                     @endforelse
                 </div>
-                @if ($this->visibleReviewsCount > $reviewLimit)
-                    <x-button variant="outline" size="sm" class="mt-4 w-full" wire:click="showMoreReviews">Lihat ulasan lainnya</x-button>
+                @if ($this->visibleReviewsCount > 3)
+                    <x-button variant="secondary" class="mt-4" icon="message-square-text" wire:click="$toggle('showAllReviews')">
+                        {{ $showAllReviews ? 'Tampilkan lebih sedikit' : 'Lihat semua ulasan ('.$this->visibleReviewsCount.')' }}
+                    </x-button>
                 @endif
-            </x-card>
+            </section>
         </div>
 
-        {{-- Sidebar --}}
-        <aside class="space-y-4 lg:sticky lg:top-24 lg:self-start">
-            <x-card>
-                <p class="text-xs font-bold tracking-widest text-mute uppercase">Jadwal terdekat</p>
-                @if ($slot)
-                    <p class="mt-2 text-lg font-bold">{{ $slot['date']->isToday() ? 'Hari ini' : $slot['date']->translatedFormat('l, j F') }}</p>
-                    <p class="text-sm text-mute">{{ $slot['window']->label() }} · {{ $slot['window']->range() }}</p>
-                @else
-                    <p class="mt-2 text-sm text-mute">Belum ada slot kosong dalam 7 hari ke depan.</p>
-                @endif
-
-                <p class="mt-5 text-xs font-bold tracking-widest text-mute uppercase">Mulai dari</p>
-                <p class="mt-1 text-2xl font-extrabold tnum">{{ rupiah($technician->startingPrice()) }}</p>
-
-                <div class="mt-5 hidden lg:block">
-                    <x-button variant="dark" size="lg" :href="$this->requestUrl()" class="w-full" icon-trailing="arrow-right">
-                        Minta penawaran
-                    </x-button>
-                    <p class="mt-3 text-center text-xs text-mute">Gratis. Teknisi merespons maksimal {{ config('sejuk.response_minutes') }} menit.</p>
+        <aside class="h-fit lg:sticky lg:top-24">
+            <x-card class="p-6 shadow-xl shadow-ink/5">
+                <p class="text-xs text-mute">Kisaran seluruh layanan</p>
+                <p class="mt-1 text-2xl font-extrabold tracking-tight tnum">{{ rupiah($technician->prices->min('price_min')) }} – {{ rupiah($technician->prices->max('price_max')) }}</p>
+                <p @class(['mt-3 inline-flex items-center gap-1.5 text-sm', 'font-medium text-leaf' => $today, 'text-ink-soft' => ! $today])>
+                    <flux:icon.clock class="size-4" /> Jadwal terdekat: {{ $slotLabel }}
+                </p>
+                <div class="hidden lg:block">
+                    <x-button size="lg" :href="$this->requestUrl()" class="mt-6 w-full">Minta penawaran</x-button>
+                    <p class="mt-3 text-center text-xs leading-relaxed text-mute">Gratis dan tanpa komitmen. Kamu baru terikat setelah menyetujui estimasi dan jadwal.</p>
                 </div>
             </x-card>
-
-            <div class="rounded-3xl bg-frost/60 p-5 text-sm text-ink-soft ring-1 ring-ice/15">
-                <p class="flex items-center gap-2 font-semibold text-ink"><flux:icon.shield-check class="size-4 text-ice" /> Dana ditahan Sejuk</p>
-                <p class="mt-1">Pembayaranmu baru diteruskan ke teknisi setelah kamu konfirmasi pekerjaan selesai.</p>
-            </div>
         </aside>
     </div>
 
     {{-- Mobile sticky CTA --}}
-    <div class="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-paper/95 p-4 backdrop-blur lg:hidden">
-        <div class="mx-auto flex max-w-7xl items-center gap-4">
+    <div class="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-paper/95 px-4 py-3 backdrop-blur lg:hidden">
+        <div class="flex items-center gap-4">
             <div class="min-w-0">
                 <p class="text-xs text-mute">Mulai dari</p>
-                <p class="text-lg font-extrabold tnum">{{ rupiah($technician->startingPrice()) }}</p>
+                <p class="font-extrabold tnum">{{ rupiah($technician->startingPrice()) }}</p>
             </div>
-            <x-button variant="dark" size="lg" :href="$this->requestUrl()" class="flex-1">Minta penawaran</x-button>
+            <x-button size="lg" :href="$this->requestUrl()" class="flex-1">Minta penawaran</x-button>
         </div>
     </div>
 </div>

@@ -31,8 +31,8 @@ class Service extends Model
         return match ($this->slug) {
             'cuci' => 'droplets',
             'perbaikan' => 'wrench',
-            'bongkar' => 'package-open',
-            'berkala' => 'calendar-check',
+            'bongkar' => 'move',
+            'berkala' => 'calendar-sync',
             default => 'snowflake',
         };
     }

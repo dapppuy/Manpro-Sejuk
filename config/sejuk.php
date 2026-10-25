@@ -73,6 +73,8 @@ return [
 
     'brands' => ['Daikin', 'Panasonic', 'Sharp', 'LG', 'Samsung', 'Gree', 'Polytron', 'Midea', 'Aqua', 'Lainnya'],
 
+    'hero_image' => 'https://images.unsplash.com/photo-1642749776312-aa42ce20c9f5?auto=format&fit=crop&w=1600&q=75',
+
     'areas' => ['Lowokwaru', 'Klojen', 'Blimbing', 'Sukun', 'Kedungkandang', 'Dinoyo', 'Sawojajar', 'Tlogomas', 'Batu', 'Singosari'],
 
 ];

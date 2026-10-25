@@ -13,10 +13,10 @@ class ServiceSeeder extends Seeder
     public function run(): void
     {
         $services = [
-            ['slug' => 'cuci', 'name' => 'Cuci AC', 'description' => 'Bersihkan filter, evaporator, dan unit luar supaya dingin lagi.'],
-            ['slug' => 'perbaikan', 'name' => 'Perbaikan', 'description' => 'AC tidak dingin, bocor, berisik, atau mati total.'],
-            ['slug' => 'bongkar', 'name' => 'Bongkar-pasang', 'description' => 'Pindah unit ke ruangan atau rumah baru, termasuk instalasi.'],
-            ['slug' => 'berkala', 'name' => 'Servis berkala', 'description' => 'Perawatan rutin dan cek freon agar AC awet.'],
+            ['slug' => 'cuci', 'name' => 'Cuci AC', 'description' => 'Bersihkan filter, evaporator & unit luar'],
+            ['slug' => 'perbaikan', 'name' => 'Perbaikan', 'description' => 'AC tidak dingin, bocor, berisik, mati'],
+            ['slug' => 'bongkar', 'name' => 'Bongkar-pasang', 'description' => 'Pindah kamar atau pasang unit baru'],
+            ['slug' => 'berkala', 'name' => 'Servis berkala', 'description' => 'Perawatan rutin tiap 3–6 bulan'],
         ];
 
         foreach ($services as $order => $service) {

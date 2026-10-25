@@ -31,16 +31,16 @@ enum TechnicianBadge: string
         return match ($this) {
             self::Terdaftar => 'Akun teknisi aktif di platform',
             self::Identitas => 'KTP dan wajah sudah dicocokkan tim platform',
-            self::Sertifikat => 'Identitas terverifikasi + sertifikat kompetensi',
+            self::Sertifikat => 'Identitas terverifikasi dan memiliki sertifikat kompetensi',
         };
     }
 
     public function icon(): string
     {
         return match ($this) {
-            self::Terdaftar => 'user-check',
+            self::Terdaftar => 'user-round',
             self::Identitas => 'shield-check',
-            self::Sertifikat => 'award',
+            self::Sertifikat => 'badge-check',
         };
     }
 

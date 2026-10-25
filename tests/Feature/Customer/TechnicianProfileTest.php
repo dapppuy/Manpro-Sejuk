@@ -14,7 +14,7 @@ it('renders prices and visible reviews of a published technician', function () {
     $this->get(route('technicians.show', $technician))
         ->assertOk()
         ->assertSee('Budi Teknik AC')
-        ->assertSee('Rp85.000–Rp100.000')
+        ->assertSee('Rp85.000 – Rp100.000')
         ->assertSee('Datang tepat waktu')
         ->assertDontSee('Ulasan kasar');
 });

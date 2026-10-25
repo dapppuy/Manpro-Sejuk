@@ -22,6 +22,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read User $customer
+ * @property-read Order|null $order
  */
 #[Fillable(['order_id', 'customer_id', 'technician_id', 'rating', 'comment', 'is_hidden'])]
 class Review extends Model
@@ -54,6 +55,14 @@ class Review extends Model
     public function customer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'customer_id');
+    }
+
+    /**
+     * @return BelongsTo<Order, $this>
+     */
+    public function order(): BelongsTo
+    {
+        return $this->belongsTo(Order::class);
     }
 
     /**

@@ -59,7 +59,7 @@ class TechnicianSearch
             match ($sort) {
                 self::SORT_NEAREST => $technician->distanceKm,
                 self::SORT_RATING => -$technician->rating_avg,
-                default => -$this->relevance($technician, $radiusKm),
+                default => -$this->relevance($technician),
             },
             $technician->distanceKm,
         ]);
@@ -68,16 +68,14 @@ class TechnicianSearch
     }
 
     /**
-     * Relevance blends closeness, availability today, rating, and badge level into 0–1.
+     * Closer, available today, higher rating, and higher badge rank all score better.
      */
-    public function relevance(TechnicianProfile $technician, int $radiusKm): float
+    public function relevance(TechnicianProfile $technician): float
     {
-        $closeness = 1 - min(($technician->distanceKm ?? $radiusKm) / max($radiusKm, 1), 1);
-
-        return $closeness * 0.35
-            + ($technician->isAvailableToday() ? 0.25 : 0)
-            + ($technician->rating_avg / 5) * 0.25
-            + ($technician->badge->rank() / 3) * 0.15;
+        return -($technician->distanceKm ?? 0) * 1.2
+            + ($technician->isAvailableToday() ? 2 : 0)
+            + $technician->rating_avg * 1.5
+            + $technician->badge->rank() * 0.8;
     }
 
     /**

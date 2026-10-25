@@ -10,11 +10,13 @@ use Database\Factories\TechnicianProfileFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 
 /**
@@ -43,13 +45,15 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read User $user
- * @property-read \Illuminate\Database\Eloquent\Collection<int, Service> $services
- * @property-read \Illuminate\Database\Eloquent\Collection<int, TechnicianPrice> $prices
- * @property-read \Illuminate\Database\Eloquent\Collection<int, TechnicianServiceArea> $serviceAreas
- * @property-read \Illuminate\Database\Eloquent\Collection<int, TechnicianBrand> $brands
- * @property-read \Illuminate\Database\Eloquent\Collection<int, TechnicianPhoto> $photos
- * @property-read \Illuminate\Database\Eloquent\Collection<int, TechnicianAvailability> $availabilities
- * @property-read \Illuminate\Database\Eloquent\Collection<int, Review> $reviews
+ * @property-read Collection<int, Service> $services
+ * @property-read Collection<int, TechnicianPrice> $prices
+ * @property-read Collection<int, TechnicianServiceArea> $serviceAreas
+ * @property-read Collection<int, TechnicianBrand> $brands
+ * @property-read Collection<int, TechnicianPhoto> $photos
+ * @property-read Collection<int, TechnicianAvailability> $availabilities
+ * @property-read Collection<int, Review> $reviews
+ * @property-read Collection<int, TechnicianDocument> $documents
+ * @property-read TechnicianExperience|null $experience
  */
 #[Fillable([
     'business_name', 'slug', 'bio', 'years_experience', 'jobs_count', 'service_radius_km', 'base_area',
@@ -229,6 +233,22 @@ class TechnicianProfile extends Model
     public function availabilities(): HasMany
     {
         return $this->hasMany(TechnicianAvailability::class, 'technician_id');
+    }
+
+    /**
+     * @return HasMany<TechnicianDocument, $this>
+     */
+    public function documents(): HasMany
+    {
+        return $this->hasMany(TechnicianDocument::class, 'technician_id');
+    }
+
+    /**
+     * @return HasOne<TechnicianExperience, $this>
+     */
+    public function experience(): HasOne
+    {
+        return $this->hasOne(TechnicianExperience::class, 'technician_id');
     }
 
     /**

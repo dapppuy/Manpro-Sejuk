@@ -4,7 +4,6 @@ namespace Database\Factories;
 
 use App\Enums\TechnicianBadge;
 use App\Enums\TimeWindow;
-use App\Enums\UserRole;
 use App\Enums\VerificationStatus;
 use App\Models\TechnicianProfile;
 use App\Models\User;
@@ -26,7 +25,7 @@ class TechnicianProfileFactory extends Factory
         $business = fake()->unique()->company().' AC';
 
         return [
-            'user_id' => User::factory()->state(['role' => UserRole::Technician]),
+            'user_id' => User::factory()->technician()->state(fn () => ['phone' => fake()->unique()->numerify('0813########')]),
             'business_name' => $business,
             'slug' => Str::slug($business).'-'.Str::lower(Str::random(4)),
             'bio' => fake()->paragraph(),

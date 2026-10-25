@@ -12,18 +12,50 @@ use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
 
+/**
+ * The six sample technicians from the Figma Make prototype (src/data.ts).
+ */
 class TechnicianSeeder extends Seeder
 {
     /**
-     * Sample price rows per service slug: [note, min, max].
-     *
-     * @var array<string, list<array{0: string, 1: int, 2: int}>>
+     * Reference point the sample distances are measured from: Jl. Kertoraharjo, Ketawanggede.
      */
-    private const PRICES = [
-        'cuci' => [['0,5–1 PK', 65000, 80000], ['1,5–2 PK', 85000, 100000]],
-        'perbaikan' => [['Cek + perbaikan ringan', 100000, 175000], ['Isi freon R32', 200000, 300000]],
-        'bongkar' => [['Bongkar + pasang ulang', 300000, 450000]],
-        'berkala' => [['Per unit, per kunjungan', 75000, 90000]],
+    public const ORIGIN = [-7.9455, 112.6150];
+
+    /**
+     * Base reference prices per service: [service, note, min, max]. Each technician scales them.
+     *
+     * @var list<array{0: string, 1: string, 2: int, 3: int}>
+     */
+    private const BASE_PRICES = [
+        ['cuci', '0,5–1 PK', 60000, 85000],
+        ['cuci', '1,5–2 PK', 85000, 110000],
+        ['perbaikan', 'Cek + perbaikan ringan', 100000, 250000],
+        ['bongkar', 'Bongkar + pasang ulang', 300000, 450000],
+        ['berkala', 'Per unit, per kunjungan', 75000, 95000],
+    ];
+
+    /**
+     * @var list<string>
+     */
+    private const GALLERY = [
+        'photo-1759772238012-9d5ad59ae637',
+        'photo-1722131646940-b821a6cc6252',
+        'photo-1762341123870-d706f257a12e',
+        'photo-1758798157512-f0a864c696c9',
+        'photo-1787675907927-ae62773f56f6',
+        'photo-1698479603408-1a66a6d9e80f',
+    ];
+
+    /**
+     * @var list<array{0: string, 1: string}>
+     */
+    private const REVIEWS = [
+        ['Nadia Putri', 'Teknisi datang sesuai jadwal, komunikasinya jelas, dan AC kembali dingin.'],
+        ['Raka Aditya', 'Pengerjaan rapi dan setiap tambahan biaya dijelaskan sebelum dikerjakan.'],
+        ['Sinta Maharani', 'Respons cepat. Teknisi juga memberi saran perawatan supaya AC tidak cepat kotor.'],
+        ['Fajar Nugroho', 'Masalah tetesan air berhasil diperbaiki dan area kerja dibersihkan kembali.'],
+        ['Ayu Lestari', 'Hasil servis memuaskan. Suara AC jauh lebih halus setelah selesai dikerjakan.'],
     ];
 
     /**
@@ -34,12 +66,15 @@ class TechnicianSeeder extends Seeder
         $services = Service::all()->keyBy('slug');
 
         foreach ($this->technicians() as $index => $data) {
+            [$latitude, $longitude] = self::pointAt($data['distance'], $data['bearing']);
+
             $user = User::factory()->create([
                 'name' => $data['name'],
-                'email' => Str::lower(Str::before($data['name'], ' ')).'@sejuk.test',
+                'email' => $data['id'].'@sejuk.test',
                 'phone' => $data['phone'],
                 'phone_verified_at' => now(),
                 'role' => UserRole::Technician,
+                'avatar_path' => self::unsplash($data['photo'], 600),
             ]);
 
             $technician = $user->technicianProfile()->create([
@@ -48,53 +83,68 @@ class TechnicianSeeder extends Seeder
                 'bio' => $data['bio'],
                 'years_experience' => $data['years'],
                 'jobs_count' => $data['jobs'],
-                'service_radius_km' => $data['radius'],
+                'service_radius_km' => 10,
                 'base_area' => $data['areas'][0],
-                'latitude' => $data['lat'],
-                'longitude' => $data['lng'],
+                'latitude' => $latitude,
+                'longitude' => $longitude,
                 'badge' => $data['badge'],
                 'verification_status' => VerificationStatus::Approved,
                 'verified_at' => now()->subMonths(6 - $index),
                 'is_active' => true,
                 'is_accepting_orders' => true,
-                'is_promoted' => $data['promoted'],
+                'is_promoted' => $data['promo'],
                 'avg_response_minutes' => $data['response'],
-                'rating_avg' => 0,
-                'reviews_count' => 0,
+                'rating_avg' => $data['rating'],
+                'reviews_count' => $data['reviews'],
             ]);
 
             foreach ($data['services'] as $slug) {
                 $technician->services()->attach($services[$slug]);
+            }
 
-                foreach (self::PRICES[$slug] as [$note, $min, $max]) {
+            foreach (self::BASE_PRICES as [$slug, $note, $min, $max]) {
+                if (in_array($slug, $data['services'], true)) {
                     $technician->prices()->create([
                         'service_id' => $services[$slug]->id,
                         'note' => $note,
-                        'price_min' => $min + $data['price_offset'],
-                        'price_max' => $max + $data['price_offset'],
+                        'price_min' => self::roundPrice($min * $data['price_factor']),
+                        'price_max' => self::roundPrice($max * $data['price_factor']),
                     ]);
                 }
             }
 
             $technician->serviceAreas()->createMany(array_map(fn (string $area) => ['area_name' => $area], $data['areas']));
             $technician->brands()->createMany(array_map(fn (string $brand) => ['brand' => $brand], $data['brands']));
+            $technician->photos()->createMany(array_map(fn (string $photo) => ['path' => self::unsplash($photo)], self::GALLERY));
 
-            foreach ($data['days'] as $day) {
-                foreach ($data['windows'] as $window) {
-                    $technician->availabilities()->create(['day_of_week' => $day, 'time_window' => $window, 'is_available' => true]);
-                }
-            }
-
-            $this->seedReviews($technician, $data['reviews']);
+            $this->seedAvailability($technician, $data['windows'], $data['available_today']);
+            $this->seedReviews($technician, $index, $data['rating']);
         }
     }
 
     /**
-     * @param  list<array{0: string, 1: int, 2: string}>  $reviews
+     * @param  list<TimeWindow>  $windows
      */
-    private function seedReviews(TechnicianProfile $technician, array $reviews): void
+    private function seedAvailability(TechnicianProfile $technician, array $windows, bool $availableToday): void
     {
-        foreach ($reviews as $daysAgo => [$name, $rating, $comment]) {
+        foreach (range(0, 6) as $day) {
+            foreach ($windows as $window) {
+                $technician->availabilities()->create(['day_of_week' => $day, 'time_window' => $window, 'is_available' => true]);
+            }
+        }
+
+        if (! $availableToday) {
+            foreach (TimeWindow::cases() as $window) {
+                $technician->availabilities()->create(['date' => today(), 'time_window' => $window, 'is_available' => false]);
+            }
+        }
+    }
+
+    private function seedReviews(TechnicianProfile $technician, int $offset, float $rating): void
+    {
+        foreach (range(0, 4) as $index) {
+            [$name, $comment] = self::REVIEWS[($index + $offset) % count(self::REVIEWS)];
+
             $customer = User::firstOrCreate(
                 ['email' => Str::slug($name, '.').'@pelanggan.test'],
                 ['name' => $name, 'password' => 'password', 'role' => UserRole::Customer, 'city' => 'Malang'],
@@ -102,16 +152,38 @@ class TechnicianSeeder extends Seeder
 
             $technician->reviews()->forceCreate([
                 'customer_id' => $customer->id,
-                'rating' => $rating,
+                'rating' => $index === 3 && $rating < 4.8 ? 4 : 5,
                 'comment' => $comment,
-                'created_at' => now()->subDays(($daysAgo + 1) * 6),
+                'created_at' => now()->subWeeks($index + 2),
+                'updated_at' => now()->subWeeks($index + 2),
             ]);
         }
+    }
 
-        $technician->update([
-            'rating_avg' => round((float) $technician->reviews()->avg('rating'), 1),
-            'reviews_count' => $technician->reviews()->count(),
-        ]);
+    /**
+     * Coordinates the given distance (km) and bearing (degrees) away from the origin.
+     *
+     * @return array{0: float, 1: float}
+     */
+    public static function pointAt(float $distanceKm, float $bearing): array
+    {
+        [$latitude, $longitude] = self::ORIGIN;
+        $radians = deg2rad($bearing);
+
+        return [
+            round($latitude + ($distanceKm / 111) * cos($radians), 7),
+            round($longitude + ($distanceKm / (111 * cos(deg2rad($latitude)))) * sin($radians), 7),
+        ];
+    }
+
+    private static function roundPrice(float $amount): int
+    {
+        return (int) (round($amount / 5000) * 5000);
+    }
+
+    private static function unsplash(string $id, int $width = 800): string
+    {
+        return "https://images.unsplash.com/{$id}?auto=format&fit=crop&w={$width}&q=75";
     }
 
     /**
@@ -119,83 +191,72 @@ class TechnicianSeeder extends Seeder
      */
     private function technicians(): array
     {
-        $everyDay = range(0, 6);
-        $allWindows = TimeWindow::cases();
-
         return [
             [
-                'name' => 'Budi Santoso', 'business' => 'Budi Teknik AC', 'phone' => '081111000001',
-                'bio' => 'Spesialis AC split rumah dan kos di Malang utara. Datang tepat waktu, kerja rapi, dan selalu jelaskan masalahnya sebelum mulai.',
-                'years' => 9, 'jobs' => 312, 'radius' => 10, 'response' => 4, 'promoted' => true, 'price_offset' => 0,
-                'badge' => TechnicianBadge::Sertifikat, 'lat' => -7.9420, 'lng' => 112.6120,
-                'areas' => ['Lowokwaru', 'Dinoyo', 'Tlogomas'], 'brands' => ['Daikin', 'Panasonic', 'Sharp', 'LG'],
-                'services' => ['cuci', 'perbaikan', 'bongkar', 'berkala'], 'days' => $everyDay, 'windows' => $allWindows,
-                'reviews' => [
-                    ['Nadia Putri', 5, 'Datang sesuai jadwal, harga sama persis dengan estimasi. AC kos langsung dingin lagi.'],
-                    ['Fajar Hidayat', 5, 'Dijelaskan dulu masalahnya apa, nggak asal ganti part. Recommended.'],
-                    ['Sinta Maharani', 4, 'Kerjanya rapi, cuma datangnya agak mepet di akhir slot.'],
-                ],
+                'id' => 'budi', 'name' => 'Budi Santoso', 'business' => 'Budi Teknik AC', 'phone' => '081111000001',
+                'photo' => 'photo-1782105208181-c5b3b8996ad8', 'badge' => TechnicianBadge::Sertifikat,
+                'rating' => 4.9, 'reviews' => 128, 'distance' => 1.2, 'bearing' => 20, 'available_today' => true,
+                'years' => 9, 'jobs' => 640, 'response' => 12, 'promo' => false, 'price_factor' => 1.0,
+                'areas' => ['Ketawanggede', 'Dinoyo', 'Sumbersari', 'Lowokwaru'],
+                'brands' => ['Daikin', 'Panasonic', 'Sharp', 'LG', 'Gree'],
+                'services' => ['cuci', 'perbaikan', 'bongkar', 'berkala'],
+                'windows' => [TimeWindow::Pagi, TimeWindow::Siang, TimeWindow::Sore],
+                'bio' => 'Spesialis AC split rumah dan kos. Bersertifikat BNSP teknisi refrigerasi, terbiasa menangani AC inverter.',
             ],
             [
-                'name' => 'Rizky Pratama', 'business' => 'Rizky Cool Service', 'phone' => '081111000002',
-                'bio' => 'Melayani cuci dan perbaikan AC untuk mahasiswa dan keluarga muda. Bisa dipanggil sore dan malam.',
-                'years' => 5, 'jobs' => 156, 'radius' => 5, 'response' => 6, 'promoted' => false, 'price_offset' => -5000,
-                'badge' => TechnicianBadge::Identitas, 'lat' => -7.9405, 'lng' => 112.6040,
-                'areas' => ['Dinoyo', 'Lowokwaru', 'Sumbersari'], 'brands' => ['Sharp', 'Panasonic', 'Polytron', 'Aqua'],
-                'services' => ['cuci', 'perbaikan', 'berkala'], 'days' => $everyDay, 'windows' => [TimeWindow::Siang, TimeWindow::Sore, TimeWindow::Malam],
-                'reviews' => [
-                    ['Bagus Setiawan', 5, 'Bisa datang malam habis saya pulang kerja. Mantap.'],
-                    ['Laras Ayu', 5, 'Ramah dan cepat balas. Cuci AC 2 unit selesai sejam.'],
-                ],
+                'id' => 'rizky', 'name' => 'Rizky Maulana', 'business' => 'Rizky Cool Service', 'phone' => '081111000002',
+                'photo' => 'photo-1634402153378-16bd852cd046', 'badge' => TechnicianBadge::Identitas,
+                'rating' => 4.8, 'reviews' => 64, 'distance' => 0.8, 'bearing' => 140, 'available_today' => true,
+                'years' => 4, 'jobs' => 210, 'response' => 8, 'promo' => false, 'price_factor' => 0.9,
+                'areas' => ['Ketawanggede', 'Jatimulyo', 'Sumbersari'],
+                'brands' => ['Sharp', 'Polytron', 'Aqua', 'Midea'],
+                'services' => ['cuci', 'perbaikan', 'berkala'],
+                'windows' => [TimeWindow::Siang, TimeWindow::Sore, TimeWindow::Malam],
+                'bio' => 'Lulusan SMK teknik pendingin, buka jasa cuci dan servis AC untuk area sekitar kampus.',
             ],
             [
-                'name' => 'Slamet Riyadi', 'business' => 'Slamet Jaya AC', 'phone' => '081111000003',
-                'bio' => 'Lima belas tahun menangani AC rumah, ruko, dan kantor. Paham kelistrikan dan instalasi pipa baru.',
-                'years' => 15, 'jobs' => 540, 'radius' => 15, 'response' => 9, 'promoted' => false, 'price_offset' => 10000,
-                'badge' => TechnicianBadge::Sertifikat, 'lat' => -7.9780, 'lng' => 112.6300,
-                'areas' => ['Klojen', 'Sukun', 'Blimbing', 'Kedungkandang'], 'brands' => ['Daikin', 'Panasonic', 'LG', 'Samsung', 'Gree', 'Midea'],
-                'services' => ['cuci', 'perbaikan', 'bongkar', 'berkala'], 'days' => [1, 2, 3, 4, 5, 6], 'windows' => [TimeWindow::Pagi, TimeWindow::Siang, TimeWindow::Sore],
-                'reviews' => [
-                    ['Hendri Wijaya', 5, 'Bongkar pasang AC pindahan rumah, rapi dan pipa dirapikan. Puas.'],
-                    ['Maya Kartika', 4, 'Teknisinya senior, langsung tahu masalahnya. Harga sedikit di atas yang lain.'],
-                    ['Rudi Hartono', 5, 'Sudah langganan servis berkala di kantor. Selalu konsisten.'],
-                ],
+                'id' => 'slamet', 'name' => 'Slamet Riyadi', 'business' => 'CV Sejuk Mandiri', 'phone' => '081111000003',
+                'photo' => 'photo-1661263989552-d82526d03b0f', 'badge' => TechnicianBadge::Sertifikat,
+                'rating' => 4.7, 'reviews' => 203, 'distance' => 4.1, 'bearing' => 110, 'available_today' => true,
+                'years' => 15, 'jobs' => 1320, 'response' => 20, 'promo' => true, 'price_factor' => 1.1,
+                'areas' => ['Lowokwaru', 'Blimbing', 'Klojen', 'Dau'],
+                'brands' => ['Daikin', 'Mitsubishi', 'Panasonic', 'LG', 'Samsung'],
+                'services' => ['cuci', 'perbaikan', 'bongkar', 'berkala'],
+                'windows' => [TimeWindow::Pagi, TimeWindow::Siang, TimeWindow::Sore],
+                'bio' => 'Tim 4 teknisi untuk rumah, kos, dan kantor kecil. Melayani bongkar-pasang dengan pipa dan bracket sendiri.',
             ],
             [
-                'name' => 'Andi Wijaya', 'business' => 'Andi Sejuk Mandiri', 'phone' => '081111000004',
-                'bio' => 'Teknisi muda yang fokus cuci AC dan perbaikan ringan dengan harga bersahabat.',
-                'years' => 2, 'jobs' => 38, 'radius' => 5, 'response' => 12, 'promoted' => false, 'price_offset' => -10000,
-                'badge' => TechnicianBadge::Terdaftar, 'lat' => -8.0050, 'lng' => 112.6190,
-                'areas' => ['Sukun', 'Klojen'], 'brands' => ['Sharp', 'Polytron', 'Aqua', 'Midea'],
-                'services' => ['cuci', 'perbaikan'], 'days' => [0, 2, 4, 6], 'windows' => [TimeWindow::Pagi, TimeWindow::Siang],
-                'reviews' => [
-                    ['Dewi Lestari', 4, 'Harga murah, hasil bersih. Perlu sedikit lebih cepat balas chat.'],
-                ],
+                'id' => 'andi', 'name' => 'Andi Prasetyo', 'business' => 'Andi AC Panggilan', 'phone' => '081111000004',
+                'photo' => 'photo-1731960745314-e12045ee74a5', 'badge' => TechnicianBadge::Terdaftar,
+                'rating' => 4.6, 'reviews' => 21, 'distance' => 2.4, 'bearing' => 290, 'available_today' => false,
+                'years' => 3, 'jobs' => 75, 'response' => 30, 'promo' => false, 'price_factor' => 0.85,
+                'areas' => ['Dinoyo', 'Merjosari', 'Tlogomas'],
+                'brands' => ['Sharp', 'Changhong', 'Aqua'],
+                'services' => ['cuci', 'perbaikan'],
+                'windows' => [TimeWindow::Pagi, TimeWindow::Siang],
+                'bio' => 'Teknisi independen, belum bersertifikat. Fokus cuci AC dan perbaikan ringan dengan harga ramah kantong.',
             ],
             [
-                'name' => 'Yoga Saputra', 'business' => 'Yoga AC Service', 'phone' => '081111000005',
-                'bio' => 'Spesialis bongkar-pasang dan perawatan berkala untuk rumah tangga di Malang timur.',
-                'years' => 4, 'jobs' => 89, 'radius' => 10, 'response' => 7, 'promoted' => false, 'price_offset' => 0,
-                'badge' => TechnicianBadge::Identitas, 'lat' => -7.9390, 'lng' => 112.6500,
-                'areas' => ['Blimbing', 'Sawojajar', 'Singosari'], 'brands' => ['Gree', 'Midea', 'Samsung', 'LG'],
-                'services' => ['cuci', 'bongkar', 'berkala'], 'days' => [1, 3, 5], 'windows' => [TimeWindow::Pagi, TimeWindow::Siang, TimeWindow::Sore],
-                'reviews' => [
-                    ['Agus Salim', 5, 'Pasang AC baru rapi, sudah dicek kebocoran juga.'],
-                    ['Rina Oktavia', 4, 'Bagus, tapi jadwalnya cuma bisa hari tertentu.'],
-                ],
+                'id' => 'yoga', 'name' => 'Yoga Pratama', 'business' => 'Yoga Teknik', 'phone' => '081111000005',
+                'photo' => 'photo-1545696968-1a5245650b36', 'badge' => TechnicianBadge::Identitas,
+                'rating' => 4.5, 'reviews' => 37, 'distance' => 3.6, 'bearing' => 320, 'available_today' => false,
+                'years' => 6, 'jobs' => 180, 'response' => 25, 'promo' => false, 'price_factor' => 0.95,
+                'areas' => ['Tlogomas', 'Landungsari', 'Dau'],
+                'brands' => ['Panasonic', 'Sharp', 'Daikin'],
+                'services' => ['cuci', 'perbaikan', 'bongkar'],
+                'windows' => [TimeWindow::Siang, TimeWindow::Sore],
+                'bio' => 'Berpengalaman di toko elektronik sebelum membuka jasa sendiri. Bisa servis kulkas juga.',
             ],
             [
-                'name' => 'Hendra Kusuma', 'business' => 'Hendra Teknik Pendingin', 'phone' => '081111000006',
-                'bio' => 'Teknisi bersertifikat BNSP. Menangani semua merek, termasuk AC inverter dan kerusakan PCB.',
-                'years' => 12, 'jobs' => 410, 'radius' => 10, 'response' => 5, 'promoted' => false, 'price_offset' => 5000,
-                'badge' => TechnicianBadge::Sertifikat, 'lat' => -7.9760, 'lng' => 112.6610,
-                'areas' => ['Sawojajar', 'Kedungkandang', 'Blimbing'], 'brands' => ['Daikin', 'Panasonic', 'Sharp', 'LG', 'Samsung', 'Gree'],
-                'services' => ['cuci', 'perbaikan', 'bongkar', 'berkala'], 'days' => $everyDay, 'windows' => [TimeWindow::Pagi, TimeWindow::Siang, TimeWindow::Sore],
-                'reviews' => [
-                    ['Yusuf Maulana', 5, 'AC inverter error kode, langsung ketemu masalahnya di PCB. Biaya final sesuai yang disetujui.'],
-                    ['Putri Anggraini', 5, 'Profesional, bawa alat lengkap, dan bersih setelah kerja.'],
-                    ['Danang Prakoso', 5, 'Fast response, harga transparan.'],
-                ],
+                'id' => 'hendra', 'name' => 'Hendra Wijaya', 'business' => 'Hendra Klimatek', 'phone' => '081111000006',
+                'photo' => 'photo-1516011362164-3095a82b0af9', 'badge' => TechnicianBadge::Terdaftar,
+                'rating' => 4.9, 'reviews' => 12, 'distance' => 6.8, 'bearing' => 95, 'available_today' => true,
+                'years' => 2, 'jobs' => 40, 'response' => 15, 'promo' => false, 'price_factor' => 0.8,
+                'areas' => ['Blimbing', 'Kedungkandang'],
+                'brands' => ['LG', 'Samsung', 'Gree'],
+                'services' => ['cuci', 'berkala', 'perbaikan'],
+                'windows' => [TimeWindow::Sore, TimeWindow::Malam],
+                'bio' => 'Teknisi muda, baru bergabung. Datang tepat waktu dan rapi.',
             ],
         ];
     }

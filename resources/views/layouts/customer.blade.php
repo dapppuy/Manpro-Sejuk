@@ -3,39 +3,26 @@
     <head>
         @include('partials.head')
     </head>
-    <body class="min-h-screen bg-paper font-sans text-ink antialiased">
+    <body class="flex min-h-screen flex-col bg-paper font-sans text-ink antialiased">
         <x-customer.header />
 
-        <main>
+        <main class="flex-1">
             {{ $slot }}
         </main>
 
-        <footer class="mt-16 border-t border-line">
-            <div class="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-10 sm:px-6 md:flex-row md:items-start md:justify-between">
-                <div class="max-w-sm">
-                    <x-logo />
-                    <p class="mt-3 text-sm text-mute">Teknisi AC terdekat di {{ config('sejuk.city') }}. Harga jelas sebelum pintu diketuk.</p>
-                </div>
-                <div class="grid grid-cols-2 gap-8 text-sm sm:grid-cols-3">
-                    <div class="flex flex-col gap-2">
-                        <p class="font-semibold text-ink">Pelanggan</p>
-                        <a href="{{ route('search') }}" wire:navigate class="text-mute hover:text-ink">Cari teknisi</a>
-                        <a href="{{ route('home') }}#cara-kerja" wire:navigate class="text-mute hover:text-ink">Cara kerja</a>
-                    </div>
-                    <div class="flex flex-col gap-2">
-                        <p class="font-semibold text-ink">Teknisi</p>
-                        @if (Route::has('mitra.register'))
-                            <a href="{{ route('mitra.register') }}" class="text-mute hover:text-ink">Daftar jadi mitra</a>
-                        @endif
-                        <a href="{{ route('mitra.login') }}" class="text-mute hover:text-ink">Masuk Sejuk Mitra</a>
-                    </div>
-                    <div class="flex flex-col gap-2">
-                        <p class="font-semibold text-ink">Pembayaran</p>
-                        <p class="text-mute">QRIS, virtual account, e-wallet. Dana ditahan sampai pekerjaan selesai.</p>
-                    </div>
-                </div>
+        <footer class="border-t border-line">
+            <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-8 text-sm text-mute sm:px-6">
+                <span class="flex items-center gap-2 font-semibold text-ink">
+                    <flux:icon.snowflake class="size-4 text-ice" /> Sejuk
+                </span>
+                <nav class="flex flex-wrap gap-x-5 gap-y-2" aria-label="Tautan bawah">
+                    <a href="{{ route('home') }}#cara-kerja" wire:navigate class="hover:text-ink">Cara kerja</a>
+                    @if (Route::has('mitra.register'))
+                        <a href="{{ route('mitra.register') }}" class="hover:text-ink">Daftar jadi mitra</a>
+                    @endif
+                    <span>Teknisi AC terdekat di {{ config('sejuk.city') }}</span>
+                </nav>
             </div>
-            <p class="border-t border-line py-5 text-center text-xs text-mute">© {{ now()->year }} Sejuk · {{ config('sejuk.city') }}</p>
         </footer>
 
         @persist('toast')

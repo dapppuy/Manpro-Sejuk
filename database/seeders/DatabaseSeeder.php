@@ -30,10 +30,10 @@ class DatabaseSeeder extends Seeder
         $customer->addresses()->createMany([
             [
                 'label' => 'Kos Melati',
-                'address' => 'Jl. MT Haryono No. 12, Lowokwaru, Malang',
-                'detail' => 'Kamar 7, lantai 2',
-                'latitude' => -7.9435,
-                'longitude' => 112.6150,
+                'address' => 'Jl. Kertoraharjo, Ketawanggede, Lowokwaru',
+                'detail' => 'Kos Melati, kamar 12',
+                'latitude' => TechnicianSeeder::ORIGIN[0],
+                'longitude' => TechnicianSeeder::ORIGIN[1],
                 'is_primary' => true,
             ],
             [

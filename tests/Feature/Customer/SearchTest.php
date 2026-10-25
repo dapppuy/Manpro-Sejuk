@@ -103,6 +103,6 @@ it('suggests a wider radius when nothing is found', function () {
 
     Livewire::test('pages::search', ['service' => 'cuci', 'radius' => 1])
         ->assertSee('Perluas radius ke 3 km')
-        ->call('widenRadius', 5)
+        ->set('radius', 5)
         ->assertSee('Agak Jauh AC');
 });

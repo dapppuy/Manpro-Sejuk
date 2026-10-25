@@ -14,7 +14,7 @@ use Livewire\Component;
 
 new #[Layout('layouts::customer'), Title('Cari teknisi AC')] class extends Component {
     #[Url(as: 'layanan')]
-    public string $service = '';
+    public string $service = 'cuci';
 
     #[Url]
     public int $radius = 5;
@@ -28,22 +28,26 @@ new #[Layout('layouts::customer'), Title('Cari teknisi AC')] class extends Compo
     #[Url(as: 'urut')]
     public string $sort = TechnicianSearch::SORT_RELEVANT;
 
+    public ?string $notice = null;
+
     public function mount(): void
     {
         if (! in_array($this->radius, config('sejuk.search_radius_options'), true)) {
             $this->radius = (int) config('sejuk.default_search_radius');
         }
+
+        if ($this->selectedService === null) {
+            $this->service = (string) $this->services->first()?->slug;
+        }
+
+        $this->notice = session('sejuk.rejected_notice');
     }
 
     public function resetFilters(): void
     {
-        $this->reset('radius', 'availableToday', 'badge', 'sort');
+        $this->availableToday = false;
+        $this->badge = '';
         $this->radius = (int) config('sejuk.default_search_radius');
-    }
-
-    public function widenRadius(int $radius): void
-    {
-        $this->radius = $radius;
     }
 
     /**
@@ -61,13 +65,10 @@ new #[Layout('layouts::customer'), Title('Cari teknisi AC')] class extends Compo
         return $this->services->firstWhere('slug', $this->service);
     }
 
-    /**
-     * @return array{address: string, label: string|null, detail: string|null, latitude: float|null, longitude: float|null}|null
-     */
     #[Computed]
-    public function location(): ?array
+    public function address(): ?string
     {
-        return app(CustomerLocation::class)->current(auth()->user());
+        return app(CustomerLocation::class)->current(auth()->user())['address'] ?? null;
     }
 
     /**
@@ -109,179 +110,113 @@ new #[Layout('layouts::customer'), Title('Cari teknisi AC')] class extends Compo
     {
         return collect(config('sejuk.search_radius_options'))->first(fn (int $option) => $option > $this->radius);
     }
-
-    public function requestUrl(TechnicianProfile $technician): string
-    {
-        return Route::has('requests.create')
-            ? route('requests.create', array_filter(['technician' => $technician, 'layanan' => $this->service ?: null]))
-            : route('technicians.show', $technician);
-    }
 }; ?>
 
-<div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:py-10" x-data="{ filters: false }">
-    {{-- Heading --}}
-    <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div class="min-w-0">
-            <p class="flex items-center gap-1.5 text-sm font-semibold text-mute">
-                <flux:icon.map-pin class="size-4 text-ice" />
-                @if ($this->location)
-                    <span class="truncate">{{ $this->location['address'] }}</span>
-                @else
-                    <span>Pusat kota {{ config('sejuk.city') }}</span>
-                @endif
-                <a href="{{ route('home') }}#lokasi" wire:navigate class="shrink-0 text-ice hover:underline">Ubah</a>
-            </p>
-            <h1 class="mt-2 text-2xl font-extrabold tracking-tight sm:text-3xl">
-                {{ $this->selectedService?->name ?? 'Semua layanan' }}
-                <span class="text-mute">· {{ $this->technicians->count() }} teknisi</span>
-            </h1>
-        </div>
+@php
+    $serviceName = str($this->selectedService?->name ?? 'AC')->lower();
+@endphp
 
+<div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10" x-data="{ filters: false }">
+    <div class="mb-6 flex flex-wrap items-end justify-between gap-4 sm:mb-8">
+        <div class="min-w-0">
+            <p class="flex items-center gap-1.5 text-sm text-mute">
+                <flux:icon.map-pin class="size-4 shrink-0" />
+                <span class="truncate">{{ $this->address ?? 'Pusat kota '.config('sejuk.city') }}</span>
+                <a href="{{ route('home') }}#lokasi" wire:navigate class="shrink-0 font-semibold text-ice hover:text-ice-deep">Ubah</a>
+            </p>
+            <h1 class="mt-1 text-2xl font-extrabold tracking-tight sm:text-3xl">Teknisi {{ $serviceName }} di sekitarmu</h1>
+        </div>
         <div class="flex items-center gap-2">
-            <label for="sort" class="text-sm font-semibold text-mute">Urutkan</label>
-            <select id="sort" wire:model.live="sort" class="h-10 rounded-full bg-white pr-9 pl-4 text-sm font-semibold text-ink ring-1 ring-line focus:ring-2 focus:ring-ice focus:outline-none">
-                <option value="relevan">Paling relevan</option>
-                <option value="terdekat">Terdekat</option>
-                <option value="rating">Rating tertinggi</option>
-            </select>
+            <label class="flex items-center gap-2 text-sm">
+                <span class="text-mute">Urutkan</span>
+                <select wire:model.live="sort" class="h-10 rounded-full bg-white px-4 font-semibold ring-1 ring-line outline-none">
+                    <option value="relevan">Paling relevan</option>
+                    <option value="terdekat">Terdekat</option>
+                    <option value="rating">Rating tertinggi</option>
+                </select>
+            </label>
             <button type="button" class="inline-flex h-10 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold ring-1 ring-line lg:hidden" @click="filters = ! filters" :aria-expanded="filters">
                 <flux:icon.sliders-horizontal class="size-4" /> Filter
             </button>
         </div>
     </div>
 
-    @if (session('sejuk.rejected_notice'))
-        <div class="mt-5 flex items-start gap-3 rounded-2xl bg-sun-soft px-4 py-3 text-sm text-sun-ink ring-1 ring-sun-line/50" role="status">
-            <flux:icon.info class="mt-0.5 size-4 shrink-0" />
-            <p>{{ session('sejuk.rejected_notice') }}</p>
+    @if ($notice)
+        <div class="rise mb-6 flex items-center justify-between gap-3 rounded-2xl bg-sun-soft px-5 py-3.5 text-sm ring-1 ring-sun/40" role="status">
+            <span>{{ $notice }}</span>
+            <button type="button" wire:click="$set('notice', null)" aria-label="Tutup" class="text-ink-soft"><flux:icon.x class="size-4" /></button>
         </div>
     @endif
 
-    {{-- Service chips --}}
-    <div class="no-scrollbar -mx-4 mt-5 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-        <x-chip :active="$service === ''" wire:click="$set('service', '')">Semua</x-chip>
-        @foreach ($this->services as $item)
-            <x-chip wire:key="chip-{{ $item->id }}" :active="$service === $item->slug" :icon="$item->icon()" wire:click="$set('service', '{{ $item->slug }}')">
-                {{ $item->name }}
-            </x-chip>
-        @endforeach
-    </div>
-
-    <div class="mt-6 grid gap-6 lg:grid-cols-[260px_1fr]">
-        {{-- Filters --}}
-        <aside class="lg:block" :class="filters ? 'block' : 'hidden'" x-cloak>
-            <div class="space-y-6 rounded-3xl bg-white p-5 ring-1 ring-line lg:sticky lg:top-24">
-                <fieldset>
-                    <legend class="text-xs font-bold tracking-widest text-mute uppercase">Radius</legend>
-                    <div class="mt-3 grid grid-cols-4 gap-2">
-                        @foreach (config('sejuk.search_radius_options') as $option)
-                            <button type="button" wire:key="radius-{{ $option }}" wire:click="$set('radius', {{ $option }})" @class([
-                                'h-10 rounded-xl text-sm font-semibold tnum transition',
-                                'bg-ink text-white' => $radius === $option,
-                                'bg-paper text-ink-soft ring-1 ring-line hover:ring-ink-soft' => $radius !== $option,
-                            ])>{{ $option }} km</button>
-                        @endforeach
-                    </div>
-                </fieldset>
-
-                <fieldset>
-                    <legend class="text-xs font-bold tracking-widest text-mute uppercase">Ketersediaan</legend>
-                    <div class="mt-3 grid grid-cols-2 gap-2">
-                        <x-chip :active="! $availableToday" class="justify-center" wire:click="$set('availableToday', false)">Semua</x-chip>
-                        <x-chip :active="$availableToday" class="justify-center" wire:click="$set('availableToday', true)">Hari ini</x-chip>
-                    </div>
-                </fieldset>
-
-                <fieldset>
-                    <legend class="text-xs font-bold tracking-widest text-mute uppercase">Badge minimal</legend>
-                    <div class="mt-3 flex flex-col gap-2">
-                        @foreach (['' => 'Semua teknisi', 'identitas' => 'Terverifikasi', 'sertifikat' => 'Bersertifikat'] as $value => $label)
-                            <label wire:key="badge-{{ $value ?: 'all' }}" class="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold ring-1 transition has-checked:bg-frost has-checked:ring-ice/40 {{ $badge === $value ? 'ring-ice/40' : 'ring-line' }}">
-                                <input type="radio" wire:model.live="badge" value="{{ $value }}" class="size-4 accent-ice" />
-                                {{ $label }}
-                            </label>
-                        @endforeach
-                    </div>
-                </fieldset>
-
-                <button type="button" wire:click="resetFilters" class="w-full text-sm font-semibold text-ice hover:underline">Reset filter</button>
+    <div class="grid gap-8 lg:grid-cols-[272px_1fr]">
+        <aside class="h-fit space-y-7 lg:sticky lg:top-24 lg:block" :class="filters ? 'block' : 'hidden'" x-cloak>
+            <div class="flex items-center gap-2 font-bold">
+                <flux:icon.sliders-horizontal class="size-4" /> Filter
+            </div>
+            <div>
+                <p class="mb-2.5 text-xs font-bold tracking-wider text-mute uppercase">Jenis layanan</p>
+                <div class="flex flex-wrap gap-2">
+                    @foreach ($this->services as $item)
+                        <x-chip wire:key="svc-{{ $item->id }}" :active="$service === $item->slug" wire:click="$set('service', '{{ $item->slug }}')">{{ $item->name }}</x-chip>
+                    @endforeach
+                </div>
+            </div>
+            <div>
+                <p class="mb-2.5 text-xs font-bold tracking-wider text-mute uppercase">Radius</p>
+                <div class="flex flex-wrap gap-2">
+                    @foreach (config('sejuk.search_radius_options') as $option)
+                        <x-chip wire:key="radius-{{ $option }}" :active="$radius === $option" wire:click="$set('radius', {{ $option }})">{{ $option }} km</x-chip>
+                    @endforeach
+                </div>
+            </div>
+            <div>
+                <p class="mb-2.5 text-xs font-bold tracking-wider text-mute uppercase">Ketersediaan</p>
+                <div class="flex flex-wrap gap-2">
+                    <x-chip :active="! $availableToday" wire:click="$set('availableToday', false)">Semua</x-chip>
+                    <x-chip :active="$availableToday" wire:click="$set('availableToday', true)">Tersedia hari ini</x-chip>
+                </div>
+            </div>
+            <div>
+                <p class="mb-2.5 text-xs font-bold tracking-wider text-mute uppercase">Badge minimal</p>
+                <div class="flex flex-wrap gap-2">
+                    <x-chip :active="$badge === ''" wire:click="$set('badge', '')">Semua</x-chip>
+                    <x-chip :active="$badge === 'identitas'" wire:click="$set('badge', 'identitas')">Terverifikasi</x-chip>
+                    <x-chip :active="$badge === 'sertifikat'" wire:click="$set('badge', 'sertifikat')">Bersertifikat</x-chip>
+                </div>
             </div>
         </aside>
 
-        {{-- Results --}}
-        <section aria-live="polite" class="relative">
-            <div wire:loading.delay class="absolute inset-0 z-10 rounded-3xl bg-paper/60"></div>
+        <section class="relative min-w-0">
+            <p class="mb-4 text-sm text-mute tnum">{{ $this->technicians->count() }} teknisi dalam radius {{ $radius }} km</p>
+            <div wire:loading.delay class="absolute inset-0 z-10 bg-paper/50"></div>
 
-            @forelse ($this->technicians as $technician)
-                @php
-                    $promoted = $technician->isPromotedNow();
-                    $price = $this->selectedService ? $technician->startingPriceFor($this->selectedService->id) : $technician->startingPrice();
-                    $today = $technician->isAvailableToday();
-                    $slot = $today ? null : $technician->nextSlot();
-                @endphp
-                <article wire:key="tech-{{ $technician->id }}" @class([
-                    'rise mb-4 rounded-3xl p-4 sm:p-5',
-                    'bg-sun-soft/50 ring-2 ring-sun-line' => $promoted,
-                    'bg-white ring-1 ring-line' => ! $promoted,
-                ])>
-                    <div class="flex gap-4">
-                        <a href="{{ route('technicians.show', $technician) }}" wire:navigate class="shrink-0">
-                            <x-avatar :name="$technician->user->name" size="lg" class="size-16 sm:size-20" />
-                        </a>
-                        <div class="min-w-0 flex-1">
-                            <div class="flex flex-wrap items-center gap-2">
-                                @if ($promoted) <x-promo-label /> @endif
-                                <x-badge-chip :badge="$technician->badge" size="sm" />
-                            </div>
-                            <a href="{{ route('technicians.show', $technician) }}" wire:navigate class="mt-1.5 block">
-                                <h2 class="truncate text-lg font-bold text-ink hover:text-ice">{{ $technician->business_name }}</h2>
-                            </a>
-                            <p class="text-sm text-mute">{{ $technician->user->name }}</p>
-                            <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-soft">
-                                <x-rating :value="$technician->rating_avg" :count="$technician->reviews_count" />
-                                <span class="inline-flex items-center gap-1 tnum"><flux:icon.navigation class="size-3.5 text-mute" /> {{ number_format($technician->distanceKm, 1, ',', '') }} km</span>
-                                <span class="inline-flex items-center gap-1 tnum"><flux:icon.briefcase class="size-3.5 text-mute" /> {{ $technician->jobs_count }} pekerjaan</span>
-                                @if ($technician->avg_response_minutes)
-                                    <span class="inline-flex items-center gap-1 tnum"><flux:icon.timer class="size-3.5 text-mute" /> Balas ±{{ $technician->avg_response_minutes }} mnt</span>
-                                @endif
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="mt-4 flex flex-col gap-3 border-t border-line/70 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-                            @if ($today)
-                                <x-pill tone="leaf" icon="circle-check">Tersedia hari ini</x-pill>
-                            @elseif ($slot)
-                                <x-pill tone="mute" icon="calendar-days">{{ $slot['date']->translatedFormat('D, j M') }} · {{ $slot['window']->label() }}</x-pill>
-                            @else
-                                <x-pill tone="mute">Jadwal penuh minggu ini</x-pill>
-                            @endif
-                            @if ($price !== null)
-                                <p class="text-sm text-mute">Mulai dari <span class="text-base font-extrabold text-ink tnum">{{ rupiah($price) }}</span></p>
-                            @endif
-                        </div>
-                        <div class="flex gap-2">
-                            <x-button variant="outline" size="sm" :href="route('technicians.show', $technician)" wire:navigate class="flex-1 sm:flex-none">Lihat profil</x-button>
-                            <x-button variant="dark" size="sm" :href="$this->requestUrl($technician)" class="flex-1 sm:flex-none">Minta penawaran</x-button>
-                        </div>
-                    </div>
-                </article>
-            @empty
-                <div class="rounded-3xl bg-white px-6 py-14 text-center ring-1 ring-line">
-                    <span class="mx-auto grid size-14 place-items-center rounded-2xl bg-frost text-ice-deep">
-                        <flux:icon.search class="size-6" />
+            @if ($this->technicians->isEmpty())
+                <x-card class="rise flex flex-col items-center px-6 py-16 text-center">
+                    <span class="grid size-14 place-items-center rounded-2xl bg-paper">
+                        <flux:icon.search-x class="size-6 text-mute" />
                     </span>
-                    <h2 class="mt-4 text-lg font-bold">Belum ada teknisi yang cocok</h2>
-                    <p class="mx-auto mt-1 max-w-sm text-sm text-mute">Coba perluas radius atau longgarkan filter supaya lebih banyak teknisi muncul.</p>
-                    <div class="mt-6 flex flex-col justify-center gap-2 sm:flex-row">
+                    <h2 class="mt-5 text-xl font-bold">Belum ada teknisi di area ini</h2>
+                    <p class="mt-2 max-w-sm text-ink-soft">Tidak ada teknisi {{ $serviceName }} yang cocok dalam radius {{ $radius }} km. Coba perluas radius pencarian.</p>
+                    <div class="mt-6 flex flex-wrap justify-center gap-2">
                         @if ($this->widerRadius)
-                            <x-button variant="dark" wire:click="widenRadius({{ $this->widerRadius }})">Perluas radius ke {{ $this->widerRadius }} km</x-button>
+                            <x-button wire:click="$set('radius', {{ $this->widerRadius }})">Perluas radius ke {{ $this->widerRadius }} km</x-button>
                         @endif
-                        <x-button variant="outline" wire:click="resetFilters">Reset filter</x-button>
+                        <x-button variant="secondary" wire:click="resetFilters">Reset filter</x-button>
                     </div>
-                </div>
-            @endforelse
+                </x-card>
+            @else
+                <ul class="space-y-3">
+                    @foreach ($this->technicians as $technician)
+                        <li wire:key="tech-{{ $technician->id }}" class="rise">
+                            <x-tech-card
+                                :technician="$technician"
+                                :price="$this->selectedService ? $technician->startingPriceFor($this->selectedService->id) : $technician->startingPrice()"
+                                :href="route('technicians.show', ['technician' => $technician, 'layanan' => $service])"
+                            />
+                        </li>
+                    @endforeach
+                </ul>
+            @endif
         </section>
     </div>
 </div>

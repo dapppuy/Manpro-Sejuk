@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 /**
@@ -82,6 +83,20 @@ class User extends Authenticatable
         }
 
         return $digits;
+    }
+
+    /**
+     * Profile photo URL, or null when the user has none.
+     */
+    public function avatarUrl(): ?string
+    {
+        if ($this->avatar_path === null) {
+            return null;
+        }
+
+        return Str::startsWith($this->avatar_path, ['http://', 'https://'])
+            ? $this->avatar_path
+            : Storage::disk('public')->url($this->avatar_path);
     }
 
     public function isCustomer(): bool

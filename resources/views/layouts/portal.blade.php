@@ -37,7 +37,7 @@
 
             @if ($user)
                 <div class="mx-4 mb-4 flex items-center gap-3 rounded-2xl bg-white/5 p-3">
-                    <x-avatar :name="$user->name" size="sm" class="!bg-white/10 !text-frost" />
+                    <x-avatar :name="$user->name" :src="$user->avatarUrl()" size="sm" class="rounded-full !bg-white/10 !text-frost" />
                     <div class="min-w-0">
                         <p class="truncate text-sm font-semibold">{{ $user->name }}</p>
                         <p class="truncate text-xs text-white/55">{{ $subtitle ?? $user->email }}</p>

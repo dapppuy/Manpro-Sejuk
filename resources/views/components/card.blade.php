@@ -1,8 +1,7 @@
 @props([
-    'padding' => 'p-5 sm:p-6',
     'as' => 'div',
 ])
 
-<{{ $as }} {{ $attributes->class(['rounded-3xl bg-white ring-1 ring-line', $padding]) }}>
+<{{ $as }} {{ $attributes->class('rounded-2xl bg-white ring-1 ring-line') }}>
     {{ $slot }}
 </{{ $as }}>
