@@ -10,6 +10,7 @@ use App\Models\Payment;
 use App\Services\Midtrans\MidtransException;
 use App\Services\OrderWorkflow;
 use App\Services\PaymentService;
+use App\Support\OrderSimulator;
 use Flux\Flux;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Gate;
@@ -164,6 +165,17 @@ new #[Layout('layouts::customer')] class extends Component {
 
         $this->runAction(fn () => $workflow->requestRework($this->order, auth()->user(), trim($this->complaint) ?: null));
         $this->reset('showReworkForm', 'complaint');
+    }
+
+    /**
+     * Local development only: run a technician or payment step from the simulation panel.
+     */
+    public function simulate(string $action, OrderSimulator $simulator): void
+    {
+        abort_unless(OrderSimulator::isEnabled(), 404);
+        Gate::authorize('manage', $this->order);
+
+        $this->runAction(fn () => $simulator->run($this->order->refresh(), $action));
     }
 
     public function findOtherTechnician(): void
@@ -597,7 +609,11 @@ new #[Layout('layouts::customer')] class extends Component {
             @endswitch
         </div>
 
-        <aside class="h-fit space-y-4 lg:sticky lg:top-24">
+        @if (OrderSimulator::isEnabled())
+            <x-order.simulator :actions="app(OrderSimulator::class)->actionsFor($order)" class="lg:col-start-1 lg:row-start-2" />
+        @endif
+
+        <aside class="h-fit space-y-4 lg:sticky lg:top-24 lg:row-span-2 lg:row-start-1">
             @if ($technician)
                 <x-card class="p-5">
                     <p class="text-xs font-semibold tracking-wider text-mute uppercase">Teknisi</p>

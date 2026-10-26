@@ -67,6 +67,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Local Simulation
+    |--------------------------------------------------------------------------
+    |
+    | Shows a panel on the customer order page that plays the technician and
+    | payment steps, so the whole flow can be tried from one account. Only
+    | ever active when APP_ENV=local.
+    |
+    */
+
+    'simulation' => (bool) env('SEJUK_SIMULATION', true),
+
+    /*
+    |--------------------------------------------------------------------------
     | Reference Data
     |--------------------------------------------------------------------------
     */
