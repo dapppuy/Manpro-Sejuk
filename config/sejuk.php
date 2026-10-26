@@ -78,6 +78,9 @@ return [
 
     'simulation' => (bool) env('SEJUK_SIMULATION', true),
 
+    // The "Untuk Teknisi" button in the customer header. Hidden for now; the portal stays reachable at /mitra/masuk.
+    'show_technician_entry' => (bool) env('SEJUK_SHOW_TECHNICIAN_ENTRY', false),
+
     /*
     |--------------------------------------------------------------------------
     | Reference Data

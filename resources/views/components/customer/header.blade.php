@@ -37,10 +37,12 @@
                 </a>
             @endif
 
-            <a href="{{ $user?->isTechnician() ? route('mitra.dashboard') : route('mitra.login') }}" class="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-sm font-semibold ring-1 ring-line hover:ring-ink/30 sm:px-3.5" aria-label="Buka portal teknisi">
-                <flux:icon.wrench class="size-4" />
-                <span class="hidden sm:inline">Untuk Teknisi</span>
-            </a>
+            @if (config('sejuk.show_technician_entry'))
+                <a href="{{ $user?->isTechnician() ? route('mitra.dashboard') : route('mitra.login') }}" class="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-sm font-semibold ring-1 ring-line hover:ring-ink/30 sm:px-3.5" aria-label="Buka portal teknisi">
+                    <flux:icon.wrench class="size-4" />
+                    <span class="hidden sm:inline">Untuk Teknisi</span>
+                </a>
+            @endif
 
             @auth
                 <flux:dropdown position="bottom" align="end">
