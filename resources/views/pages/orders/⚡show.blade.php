@@ -589,14 +589,30 @@ new #[Layout('layouts::customer')] class extends Component {
                     @break
 
                 @case(OrderStatus::Dibatalkan)
-                    @php $finalRejected = $order->cancelled_reason === OrderWorkflow::REASON_FINAL_COST_REJECTED; @endphp
+                    @php
+                        $finalRejected = $order->cancelled_reason === OrderWorkflow::REASON_FINAL_COST_REJECTED;
+                        $byAdmin = str_starts_with((string) $order->cancelled_reason, 'Dibatalkan admin');
+                        $refunded = $order->fund_status === \App\Enums\FundStatus::Dikembalikan;
+                    @endphp
                     <x-order.panel icon="circle-x" icon-class="text-ink-soft"
                         :title="$finalRejected ? 'Pekerjaan tidak dimulai' : 'Pesanan dibatalkan'"
-                        :sub="$finalRejected ? 'Kamu menolak biaya final. Teknisi tidak mengerjakan apa pun dan pesanan ditutup.' : 'Pesanan dibatalkan sebelum teknisi berangkat, tanpa biaya apa pun.'">
-                        <div class="mt-5 flex items-center justify-between rounded-2xl bg-paper px-5 py-4 text-sm">
-                            <span>{{ $finalRejected ? 'Biaya kunjungan' : 'Biaya pembatalan' }}</span>
-                            <span class="font-bold tnum">{{ $finalRejected ? rupiah(config('sejuk.visit_fee')) : 'Rp0' }}</span>
-                        </div>
+                        :sub="match (true) {
+                            $finalRejected => 'Kamu menolak biaya final. Teknisi tidak mengerjakan apa pun dan pesanan ditutup.',
+                            $byAdmin => 'Tim Sejuk membatalkan pesanan ini. '.str($order->cancelled_reason)->after(': '),
+                            default => 'Pesanan dibatalkan sebelum teknisi berangkat, tanpa biaya apa pun.',
+                        }">
+                        @if ($refunded)
+                            <div class="mt-5 flex items-center justify-between rounded-2xl bg-leaf-soft px-5 py-4 text-sm text-leaf">
+                                <span>Dana dikembalikan ke kamu</span>
+                                <span class="font-bold tnum">{{ rupiah($order->final_total) }}</span>
+                            </div>
+                            <p class="mt-2 text-xs text-mute">Tim Sejuk akan menghubungimu untuk proses pengembalian dana.</p>
+                        @else
+                            <div class="mt-5 flex items-center justify-between rounded-2xl bg-paper px-5 py-4 text-sm">
+                                <span>{{ $finalRejected ? 'Biaya kunjungan' : 'Biaya pembatalan' }}</span>
+                                <span class="font-bold tnum">{{ $finalRejected ? rupiah(config('sejuk.visit_fee')) : 'Rp0' }}</span>
+                            </div>
+                        @endif
                         <div class="mt-8 flex flex-wrap gap-3">
                             <x-button size="lg" :href="route('search', ['layanan' => $order->service->slug])" wire:navigate>Cari teknisi lain</x-button>
                             <x-button size="lg" variant="secondary" :href="route('home')" wire:navigate>Ke beranda</x-button>

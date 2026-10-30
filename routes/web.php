@@ -59,6 +59,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
     Route::livewire('verifikasi', 'pages::admin.verifications.index')->name('verifications.index');
     Route::livewire('verifikasi/{technician:id}', 'pages::admin.verifications.show')->name('verifications.show');
     Route::livewire('teknisi', 'pages::admin.technicians.index')->name('technicians.index');
+    Route::livewire('pesanan', 'pages::admin.orders.index')->name('orders.index');
+    Route::livewire('pesanan/{order}', 'pages::admin.orders.show')->name('orders.show');
+    Route::livewire('dana', 'pages::admin.funds')->name('funds');
+    Route::livewire('ulasan', 'pages::admin.reviews')->name('reviews');
     Route::get('dokumen/{document}', TechnicianDocumentController::class)->name('documents.show');
 });
 

@@ -286,6 +286,44 @@ class OrderWorkflow
     }
 
     /**
+     * Admin cancels an order that has not finished. Money already held is marked for a manual refund.
+     */
+    public function cancelByAdmin(Order $order, User $admin, string $reason): void
+    {
+        if (! $order->status->isActive()) {
+            throw new InvalidOrderTransition('Pesanan ini sudah selesai atau dibatalkan.');
+        }
+
+        DB::transaction(function () use ($order, $admin, $reason) {
+            $order->offers()->where('status', OfferStatus::Menunggu)->update(['status' => OfferStatus::Kedaluwarsa, 'responded_at' => now()]);
+
+            $order->fill([
+                'cancelled_reason' => 'Dibatalkan admin: '.$reason,
+                'response_deadline' => null,
+                'fund_status' => $order->fund_status === FundStatus::Ditahan ? FundStatus::Dikembalikan : $order->fund_status,
+            ]);
+
+            $this->transition($order, OrderStatus::Dibatalkan, $admin, $reason);
+        });
+    }
+
+    /**
+     * Admin settles a dispute: either the work stands and funds go to the technician, or the customer is refunded.
+     */
+    public function resolveDispute(Order $order, User $admin, bool $forwardToTechnician, string $note): void
+    {
+        $this->ensureStatus($order, [OrderStatus::Sengketa]);
+
+        if ($forwardToTechnician) {
+            DB::transaction(fn () => $this->complete($order, $admin, 'Sengketa diselesaikan admin: '.$note));
+
+            return;
+        }
+
+        $this->cancelByAdmin($order, $admin, $note);
+    }
+
+    /**
      * Close orders whose customer did not respond within the confirmation window.
      */
     public function autoCompleteOverdue(): int

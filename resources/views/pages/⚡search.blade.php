@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\TechnicianBadge;
+use App\Models\SearchLog;
 use App\Models\Service;
 use App\Models\TechnicianProfile;
 use App\Services\TechnicianSearch;
@@ -41,6 +42,12 @@ new #[Layout('layouts::customer'), Title('Cari teknisi AC')] class extends Compo
         }
 
         $this->notice = session('sejuk.rejected_notice');
+
+        SearchLog::create([
+            'user_id' => auth()->id(),
+            'service_id' => $this->selectedService?->id,
+            'results_count' => $this->technicians->count(),
+        ]);
     }
 
     public function resetFilters(): void

@@ -54,6 +54,23 @@ new #[Layout('layouts::admin'), Title('Teknisi')] class extends Component {
 
         Flux::toast(text: $technician->business_name.($technician->is_active ? ' diaktifkan.' : ' dinonaktifkan.'));
     }
+
+    /**
+     * Pin a technician on top of search results with the PROMOSI label, optionally for a number of days.
+     */
+    public function setPromotion(int $technicianId, int $days): void
+    {
+        abort_unless(in_array($days, [0, -1, 7, 30], true), 422);
+        $technician = TechnicianProfile::findOrFail($technicianId);
+
+        $technician->update(match ($days) {
+            0 => ['is_promoted' => false, 'promoted_until' => null],
+            -1 => ['is_promoted' => true, 'promoted_until' => null],
+            default => ['is_promoted' => true, 'promoted_until' => now()->addDays($days)->endOfDay()],
+        });
+
+        Flux::toast(text: $days === 0 ? "Promosi {$technician->business_name} dihentikan." : "{$technician->business_name} dipromosikan.");
+    }
 }; ?>
 
 <div>
@@ -66,12 +83,13 @@ new #[Layout('layouts::admin'), Title('Teknisi')] class extends Component {
     </div>
 
     <x-card class="mt-6 overflow-x-auto">
-        <table class="w-full min-w-[640px] text-left text-sm">
+        <table class="w-full min-w-[760px] text-left text-sm">
             <thead class="bg-paper text-xs tracking-wider text-mute uppercase">
                 <tr>
                     <th class="px-5 py-3 font-semibold">Teknisi</th>
                     <th class="px-5 py-3 font-semibold">Badge</th>
                     <th class="px-5 py-3 font-semibold">Rating</th>
+                    <th class="px-5 py-3 font-semibold">Promosi</th>
                     <th class="px-5 py-3 text-right font-semibold">Status</th>
                 </tr>
             </thead>
@@ -90,6 +108,17 @@ new #[Layout('layouts::admin'), Title('Teknisi')] class extends Component {
                             </select>
                         </td>
                         <td class="px-5 py-3.5"><x-rating :value="$technician->rating_avg" :count="$technician->reviews_count" /></td>
+                        <td class="px-5 py-3.5">
+                            <select wire:change="setPromotion({{ $technician->id }}, $event.target.value)" class="h-9 rounded-full bg-white px-3 text-xs font-semibold ring-1 ring-line outline-none" aria-label="Promosi {{ $technician->business_name }}">
+                                <option value="0" @selected(! $technician->isPromotedNow())>Tidak</option>
+                                <option value="7">7 hari</option>
+                                <option value="30">30 hari</option>
+                                <option value="-1">Tanpa batas</option>
+                            </select>
+                            @if ($technician->isPromotedNow())
+                                <p class="mt-1 text-[11px] text-sun-ink">{{ $technician->promoted_until ? 'Sampai '.$technician->promoted_until->translatedFormat('j M') : 'Aktif tanpa batas' }}</p>
+                            @endif
+                        </td>
                         <td class="px-5 py-3.5 text-right">
                             <button type="button" wire:click="toggleActive({{ $technician->id }})" @class(['rounded-full px-3 py-1 text-xs font-bold', 'bg-leaf-soft text-leaf' => $technician->is_active, 'bg-coral-soft text-coral' => ! $technician->is_active])>
                                 {{ $technician->is_active ? 'Aktif' : 'Nonaktif' }}
@@ -97,7 +126,7 @@ new #[Layout('layouts::admin'), Title('Teknisi')] class extends Component {
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="4" class="px-5 py-10 text-center text-mute">Tidak ada teknisi.</td></tr>
+                    <tr><td colspan="5" class="px-5 py-10 text-center text-mute">Tidak ada teknisi.</td></tr>
                 @endforelse
             </tbody>
         </table>
