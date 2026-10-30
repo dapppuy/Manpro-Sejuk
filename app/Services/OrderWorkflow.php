@@ -7,6 +7,7 @@ use App\Enums\MediaType;
 use App\Enums\OfferStatus;
 use App\Enums\OrderStatus;
 use App\Enums\TimeWindow;
+use App\Events\OrderStatusChanged;
 use App\Exceptions\InvalidOrderTransition;
 use App\Models\Order;
 use App\Models\TechnicianProfile;
@@ -54,6 +55,7 @@ class OrderWorkflow
 
             $order->offers()->create(['technician_id' => $technician->id, 'status' => OfferStatus::Menunggu]);
             $this->log($order, null, OrderStatus::MenungguRespons, $customer);
+            OrderStatusChanged::dispatch($order, null, OrderStatus::MenungguRespons, $customer);
 
             return $order;
         });
@@ -440,6 +442,8 @@ class OrderWorkflow
         $order->save();
 
         $this->log($order, $from, $to, $actor, $note);
+
+        OrderStatusChanged::dispatch($order, $from, $to, $actor);
     }
 
     private function log(Order $order, ?OrderStatus $from, OrderStatus $to, ?User $actor, ?string $note = null): void

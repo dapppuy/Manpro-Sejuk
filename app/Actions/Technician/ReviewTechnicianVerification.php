@@ -8,6 +8,7 @@ use App\Enums\TimeWindow;
 use App\Enums\VerificationStatus;
 use App\Models\TechnicianProfile;
 use App\Models\User;
+use App\Notifications\TechnicianVerificationReviewed;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -47,6 +48,8 @@ class ReviewTechnicianVerification
                     }
                 }
             }
+
+            $technician->user->notify(new TechnicianVerificationReviewed($technician, approved: true));
         });
     }
 
@@ -64,6 +67,8 @@ class ReviewTechnicianVerification
                 'reviewed_by' => $admin->id,
                 'reviewed_at' => now(),
             ]);
+
+            $technician->user->notify(new TechnicianVerificationReviewed($technician, approved: false));
         });
     }
 }

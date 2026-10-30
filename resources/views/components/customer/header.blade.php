@@ -45,6 +45,7 @@
             @endif
 
             @auth
+                <livewire:notification-bell />
                 <flux:dropdown position="bottom" align="end">
                     <button type="button" class="flex items-center gap-2 rounded-full text-sm font-semibold" aria-label="Buka menu akun">
                         <x-avatar :name="$user->name" :src="$user->avatarUrl()" size="sm" class="rounded-full" />

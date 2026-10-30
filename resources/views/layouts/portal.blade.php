@@ -38,9 +38,12 @@
             @if ($user)
                 <div class="mx-4 mb-4 flex items-center gap-3 rounded-2xl bg-white/5 p-3">
                     <x-avatar :name="$user->name" :src="$user->avatarUrl()" size="sm" class="rounded-full !bg-white/10 !text-frost" />
-                    <div class="min-w-0">
+                    <div class="min-w-0 flex-1">
                         <p class="truncate text-sm font-semibold">{{ $user->name }}</p>
                         <p class="truncate text-xs text-white/55">{{ $subtitle ?? $user->email }}</p>
+                    </div>
+                    <div class="hidden lg:block">
+                        <livewire:notification-bell :dark="true" />
                     </div>
                 </div>
             @endif
@@ -88,6 +91,11 @@
                     <x-logo />
                 @else
                     <x-logo mitra />
+                @endif
+                @if ($user)
+                    <div class="ml-auto">
+                        <livewire:notification-bell />
+                    </div>
                 @endif
             </header>
 
