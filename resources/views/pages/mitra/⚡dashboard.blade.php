@@ -3,6 +3,7 @@
 use App\Enums\OrderStatus;
 use App\Models\Order;
 use App\Models\TechnicianProfile;
+use App\Services\TechnicianEarnings;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -26,6 +27,27 @@ new #[Layout('layouts::mitra'), Title('Dashboard')] class extends Component {
             ->first();
     }
 
+    /**
+     * @return array{earnings: array{this_month: int, last_month: int, change_percent: int|null}, workload: array{active: int, needs_action: int}, completion: array{rate: int|null, completed: int, finished: int}}
+     */
+    #[Computed]
+    public function stats(): array
+    {
+        $earnings = app(TechnicianEarnings::class);
+
+        return [
+            'earnings' => $earnings->monthlyComparison($this->profile),
+            'workload' => $earnings->workload($this->profile),
+            'completion' => $earnings->completionRate($this->profile),
+        ];
+    }
+
+    #[Computed]
+    public function profileIncomplete(): bool
+    {
+        return blank($this->profile->bio) || ! $this->profile->prices()->exists() || ! $this->profile->photos()->exists();
+    }
+
     public function toggleAccepting(): void
     {
         $this->profile->update(['is_accepting_orders' => ! $this->profile->is_accepting_orders]);
@@ -45,6 +67,8 @@ new #[Layout('layouts::mitra'), Title('Dashboard')] class extends Component {
 
 @php
     $accepting = $this->profile->is_accepting_orders;
+    $stats = $this->stats;
+    $change = $stats['earnings']['change_percent'];
 @endphp
 
 <div wire:poll.30s>
@@ -61,6 +85,21 @@ new #[Layout('layouts::mitra'), Title('Dashboard')] class extends Component {
             <span @class(['size-2 rounded-full', 'bg-leaf' => $accepting, 'bg-mute' => ! $accepting])></span>
             {{ $accepting ? 'Siap menerima pesanan' : 'Tidak menerima pesanan' }}
         </button>
+    </div>
+
+    <div class="mt-7 grid gap-4 sm:grid-cols-3">
+        @foreach ([
+            ['banknote', 'Pendapatan bulan ini', rupiah($stats['earnings']['this_month']), $change === null ? 'Belum ada data bulan lalu' : ($change >= 0 ? '+' : '').$change.'% dari bulan lalu', route('mitra.earnings')],
+            ['briefcase-business', 'Pesanan aktif', $stats['workload']['active'].' pesanan', $stats['workload']['needs_action'] > 0 ? $stats['workload']['needs_action'].' perlu tindakan' : 'Tidak ada yang menunggu', route('mitra.orders.index', ['tab' => 'aktif'])],
+            ['trending-up', 'Penyelesaian', $stats['completion']['rate'] === null ? '–' : $stats['completion']['rate'].'%', $stats['completion']['completed'].' dari '.$stats['completion']['finished'].' pesanan', route('mitra.orders.index', ['tab' => 'riwayat'])],
+        ] as [$icon, $label, $value, $hint, $href])
+            <a wire:key="stat-{{ $loop->index }}" href="{{ $href }}" wire:navigate class="rounded-2xl bg-white p-5 ring-1 ring-line transition hover:ring-ink/20">
+                <span class="grid size-10 place-items-center rounded-xl bg-frost text-ice"><flux:icon :icon="$icon" class="size-5" /></span>
+                <p class="mt-4 text-xs font-semibold text-mute">{{ $label }}</p>
+                <p class="mt-1 text-xl font-extrabold tnum">{{ $value }}</p>
+                <p @class(['mt-1 text-xs', 'text-leaf' => $loop->first && ($change ?? 0) > 0, 'text-coral' => $loop->first && ($change ?? 0) < 0, 'text-ink-soft' => ! $loop->first || ! $change])>{{ $hint }}</p>
+            </a>
+        @endforeach
     </div>
 
     @if ($this->latestIncoming)
@@ -84,12 +123,15 @@ new #[Layout('layouts::mitra'), Title('Dashboard')] class extends Component {
         </x-card>
     @endif
 
-    <x-card class="mt-7 p-6">
-        <p class="font-bold">Lengkapi profilmu</p>
-        <p class="mt-1 text-sm text-ink-soft">Profil yang lengkap dengan harga acuan, merek, dan bio lebih sering dipilih pelanggan.</p>
-        <div class="mt-4 flex flex-wrap gap-2">
-            <x-button variant="secondary" size="sm" icon="user-round" :href="route('mitra.profile')" wire:navigate>Profil</x-button>
-            <x-button variant="secondary" size="sm" icon="tag" :href="route('mitra.prices')" wire:navigate>Harga acuan</x-button>
-        </div>
-    </x-card>
+    @if ($this->profileIncomplete)
+        <x-card class="mt-7 p-6">
+            <p class="font-bold">Lengkapi profilmu</p>
+            <p class="mt-1 text-sm text-ink-soft">Profil yang lengkap dengan bio, harga acuan, dan foto hasil kerja lebih sering dipilih pelanggan.</p>
+            <div class="mt-4 flex flex-wrap gap-2">
+                <x-button variant="secondary" size="sm" icon="user-round" :href="route('mitra.profile')" wire:navigate>Profil</x-button>
+                <x-button variant="secondary" size="sm" icon="tag" :href="route('mitra.prices')" wire:navigate>Harga acuan</x-button>
+                <x-button variant="secondary" size="sm" icon="images" :href="route('mitra.gallery')" wire:navigate>Galeri kerja</x-button>
+            </div>
+        </x-card>
+    @endif
 </div>

@@ -23,6 +23,7 @@ Route::middleware(['auth'])->group(function () {
 
 Route::middleware(['auth', 'role:customer'])->group(function () {
     Route::livewire('pesan/{technician}', 'pages::requests.create')->name('requests.create');
+    Route::livewire('akun', 'pages::account')->name('account');
     Route::livewire('pesanan', 'pages::orders.index')->name('orders.index');
     Route::livewire('pesanan/{order}', 'pages::orders.show')->name('orders.show');
     Route::livewire('pesanan/{order}/ulasan', 'pages::reviews.create')->name('reviews.create');
@@ -46,6 +47,9 @@ Route::prefix('mitra')->name('mitra.')->group(function () {
             Route::livewire('pesanan/{order}/bukti', 'pages::mitra.orders.proof')->name('orders.proof');
             Route::livewire('profil', 'pages::mitra.profile')->name('profile');
             Route::livewire('harga', 'pages::mitra.prices')->name('prices');
+            Route::livewire('jadwal', 'pages::mitra.schedule')->name('schedule');
+            Route::livewire('galeri', 'pages::mitra.gallery')->name('gallery');
+            Route::livewire('pendapatan', 'pages::mitra.earnings')->name('earnings');
         });
     });
 });

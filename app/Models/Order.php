@@ -48,6 +48,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property int|null $commission_amount
  * @property OrderStatus $status
  * @property FundStatus|null $fund_status
+ * @property int|null $payout_id
  * @property CarbonImmutable|null $final_cost_submitted_at
  * @property CarbonImmutable|null $reminded_day_before_at
  * @property CarbonImmutable|null $reminded_hour_before_at
@@ -72,7 +73,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'customer_id', 'technician_id', 'service_id', 'ac_capacity', 'ac_brand', 'ac_brand_other', 'address',
     'address_detail', 'latitude', 'longitude', 'preferred_date', 'time_window', 'notes', 'warranty', 'warranty_fee',
     'estimate_min', 'estimate_max', 'estimate_note', 'scheduled_date', 'scheduled_window', 'final_total',
-    'commission_amount', 'final_cost_submitted_at', 'reminded_day_before_at', 'reminded_hour_before_at', 'status', 'fund_status', 'response_deadline', 'proof_submitted_at', 'rework_count',
+    'commission_amount', 'final_cost_submitted_at', 'reminded_day_before_at', 'reminded_hour_before_at', 'status', 'fund_status', 'payout_id', 'response_deadline', 'proof_submitted_at', 'rework_count',
     'cancelled_reason', 'completed_at',
 ])]
 class Order extends Model
@@ -179,6 +180,14 @@ class Order extends Model
     }
 
     /**
+     * @return BelongsTo<Payout, $this>
+     */
+    public function payout(): BelongsTo
+    {
+        return $this->belongsTo(Payout::class);
+    }
+
+    /**
      * @return HasOne<Review, $this>
      */
     public function review(): HasOne
@@ -208,11 +217,15 @@ class Order extends Model
     }
 
     /**
-     * What the technician receives once funds are forwarded.
+     * What the technician receives once funds are forwarded. Before completion the commission
+     * is not recorded yet, so the configured rate gives the expected amount.
      */
     public function technicianPayout(): int
     {
-        return max(0, (int) $this->final_total - (int) $this->commission_amount);
+        $total = (int) $this->final_total;
+        $commission = $this->commission_amount ?? (int) round($total * (int) config('sejuk.commission_percent') / 100);
+
+        return max(0, $total - $commission);
     }
 
     /**

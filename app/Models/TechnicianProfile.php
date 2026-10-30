@@ -54,6 +54,7 @@ use Illuminate\Support\Carbon;
  * @property-read Collection<int, Review> $reviews
  * @property-read Collection<int, TechnicianDocument> $documents
  * @property-read TechnicianExperience|null $experience
+ * @property-read TechnicianPayoutAccount|null $payoutAccount
  */
 #[Fillable([
     'business_name', 'slug', 'bio', 'years_experience', 'jobs_count', 'service_radius_km', 'base_area',
@@ -233,6 +234,22 @@ class TechnicianProfile extends Model
     public function availabilities(): HasMany
     {
         return $this->hasMany(TechnicianAvailability::class, 'technician_id');
+    }
+
+    /**
+     * @return HasOne<TechnicianPayoutAccount, $this>
+     */
+    public function payoutAccount(): HasOne
+    {
+        return $this->hasOne(TechnicianPayoutAccount::class, 'technician_id');
+    }
+
+    /**
+     * @return HasMany<Payout, $this>
+     */
+    public function payouts(): HasMany
+    {
+        return $this->hasMany(Payout::class, 'technician_id');
     }
 
     /**
