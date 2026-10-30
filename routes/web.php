@@ -1,12 +1,11 @@
 <?php
 
 use App\Http\Controllers\Admin\TechnicianDocumentController;
+use App\Http\Controllers\DashboardRedirectController;
 use App\Http\Controllers\MidtransWebhookController;
 use App\Http\Controllers\OrderMediaController;
 use App\Http\Controllers\WorkProofPhotoController;
 use App\Http\Middleware\EnsureTechnicianIsApproved;
-use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::livewire('/', 'pages::home')->name('home');
@@ -16,7 +15,7 @@ Route::livewire('teknisi/{technician}', 'pages::technicians.show')->name('techni
 Route::post('webhooks/midtrans', MidtransWebhookController::class)->name('webhooks.midtrans');
 
 Route::middleware(['auth'])->group(function () {
-    Route::get('dashboard', fn (Request $request): RedirectResponse => redirect($request->user()->homeRoute()))->name('dashboard');
+    Route::get('dashboard', DashboardRedirectController::class)->name('dashboard');
     Route::get('pesanan/media/{media}', OrderMediaController::class)->name('orders.media');
     Route::get('pesanan/bukti/{proof}/{side}', WorkProofPhotoController::class)->name('orders.proofs.photo');
 });

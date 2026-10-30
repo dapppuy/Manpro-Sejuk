@@ -9,6 +9,15 @@
                 "cd public && php -d upload_max_filesize=25M -d post_max_size=30M -S 127.0.0.1:8000 ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php"
             ],
             "port": 8000
+        },
+        {
+            "name": "sejuk-audit",
+            "runtimeExecutable": "cmd",
+            "runtimeArgs": [
+                "/c",
+                "set DB_CONNECTION=sqlite&& set DB_DATABASE=C:/Projects/sejuk/database/audit.sqlite&& cd public && php -S 127.0.0.1:8001 ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php"
+            ],
+            "port": 8001
         }
     ]
 }
