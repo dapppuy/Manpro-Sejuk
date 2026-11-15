@@ -277,6 +277,7 @@ new #[Layout('layouts::customer'), Title('Profil saya')] class extends Component
                     @endforeach
                 </dl>
                 <x-button variant="secondary" size="sm" class="mt-4 w-full" icon="clipboard-list" :href="route('orders.index')" wire:navigate>Lihat pesanan saya</x-button>
+                <x-button variant="secondary" size="sm" class="mt-2 w-full" icon="qr-code" :href="route('units.index')" wire:navigate>Unit AC & riwayat servis</x-button>
             </x-card>
         </div>
 

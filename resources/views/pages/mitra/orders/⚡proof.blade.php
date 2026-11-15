@@ -3,9 +3,11 @@
 use App\Enums\OrderStatus;
 use App\Exceptions\InvalidOrderTransition;
 use App\Models\Order;
+use App\Models\UnitServiceLog;
 use App\Services\OrderWorkflow;
 use Flux\Flux;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -25,6 +27,15 @@ new #[Layout('layouts::mitra'), Title('Upload Bukti Kerja')] class extends Compo
 
     public string $note = '';
 
+    public string $findings = '';
+
+    public string $actions = '';
+
+    /**
+     * Months until the next recommended service; 0 means no recommendation.
+     */
+    public int $nextServiceMonths = 3;
+
     public function mount(Order $order): void
     {
         Gate::authorize('respond', $order);
@@ -35,7 +46,14 @@ new #[Layout('layouts::mitra'), Title('Upload Bukti Kerja')] class extends Compo
             return;
         }
 
-        $this->order = $order->load(['service', 'workProofs']);
+        $this->order = $order->load(['service', 'workProofs', 'customerUnit']);
+
+        $existingLog = UnitServiceLog::where('order_id', $order->id)->first();
+
+        if ($existingLog !== null) {
+            $this->findings = (string) $existingLog->inspection_findings;
+            $this->actions = $existingLog->actions_taken;
+        }
     }
 
     public function updatedBefore(): void
@@ -57,6 +75,9 @@ new #[Layout('layouts::mitra'), Title('Upload Bukti Kerja')] class extends Compo
             'before' => ['required', 'image', 'max:10240'],
             'after' => ['required', 'image', 'max:10240'],
             'note' => ['nullable', 'string', 'max:1000'],
+            'findings' => ['nullable', 'string', 'max:1000'],
+            'actions' => [Rule::requiredIf($this->order->customer_unit_id !== null), 'nullable', 'string', 'max:1000'],
+            'nextServiceMonths' => ['integer', Rule::in([0, 1, 3, 6, 12])],
         ];
     }
 
@@ -65,7 +86,7 @@ new #[Layout('layouts::mitra'), Title('Upload Bukti Kerja')] class extends Compo
      */
     protected function validationAttributes(): array
     {
-        return ['before' => 'foto sebelum', 'after' => 'foto sesudah', 'note' => 'catatan'];
+        return ['before' => 'foto sebelum', 'after' => 'foto sesudah', 'note' => 'catatan', 'findings' => 'temuan pemeriksaan', 'actions' => 'tindakan yang dilakukan'];
     }
 
     public function submit(OrderWorkflow $workflow): void
@@ -74,7 +95,13 @@ new #[Layout('layouts::mitra'), Title('Upload Bukti Kerja')] class extends Compo
         $validated = $this->validate();
 
         try {
-            $workflow->submitProof($this->order, auth()->user()->technicianProfile, $this->before, $this->after, $validated['note'] ?: null);
+            $unitRecord = $this->order->customer_unit_id === null ? null : [
+                'findings' => $validated['findings'] ?: null,
+                'actions' => $validated['actions'],
+                'next_service_date' => $this->nextServiceMonths > 0 ? today()->addMonths($this->nextServiceMonths)->toDateString() : null,
+            ];
+
+            $workflow->submitProof($this->order, auth()->user()->technicianProfile, $this->before, $this->after, $validated['note'] ?: null, $unitRecord);
         } catch (InvalidOrderTransition $exception) {
             Flux::toast(variant: 'danger', text: $exception->getMessage());
 
@@ -138,6 +165,27 @@ new #[Layout('layouts::mitra'), Title('Upload Bukti Kerja')] class extends Compo
             </div>
 
             <x-form.textarea label="Catatan hasil pekerjaan" name="note" rows="4" wire:model="note" placeholder="Jelaskan pekerjaan yang dilakukan dan kondisi AC setelah servis." />
+
+            @if ($order->customerUnit)
+                <div class="space-y-4 rounded-2xl bg-frost/60 p-4 ring-1 ring-ice/20 sm:p-5">
+                    <div class="flex items-start gap-3">
+                        <flux:icon.qr-code class="mt-0.5 size-5 shrink-0 text-ice" />
+                        <div>
+                            <p class="font-bold">Catatan Riwayat AC · {{ $order->customerUnit->name }}{{ $order->customerUnit->room_label ? ' ('.$order->customerUnit->room_label.')' : '' }}</p>
+                            <p class="text-sm text-ink-soft">Masuk ke riwayat unit ini dan bisa dilihat teknisi berikutnya lewat stiker QR.</p>
+                        </div>
+                    </div>
+                    <x-form.textarea label="Temuan pemeriksaan (opsional)" name="findings" rows="2" wire:model="findings" placeholder="Contoh: filter berdebu, tekanan freon normal 70 psi." />
+                    <x-form.textarea label="Tindakan yang dilakukan" name="actions" rows="2" wire:model="actions" placeholder="Contoh: cuci indoor dan outdoor, bersihkan saluran pembuangan." required />
+                    <x-form.select label="Servis berikutnya disarankan" name="nextServiceMonths" wire:model="nextServiceMonths">
+                        <option value="1">1 bulan lagi</option>
+                        <option value="3">3 bulan lagi</option>
+                        <option value="6">6 bulan lagi</option>
+                        <option value="12">12 bulan lagi</option>
+                        <option value="0">Tidak perlu dijadwalkan</option>
+                    </x-form.select>
+                </div>
+            @endif
 
             <div class="flex items-start gap-3 rounded-2xl bg-leaf-soft p-4 text-sm text-leaf">
                 <flux:icon.package-check class="mt-0.5 size-5 shrink-0" />

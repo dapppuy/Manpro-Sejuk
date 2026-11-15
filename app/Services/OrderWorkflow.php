@@ -11,6 +11,7 @@ use App\Events\OrderStatusChanged;
 use App\Exceptions\InvalidOrderTransition;
 use App\Models\Order;
 use App\Models\TechnicianProfile;
+use App\Models\UnitServiceLog;
 use App\Models\User;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Collection;
@@ -233,22 +234,40 @@ class OrderWorkflow
 
     /**
      * L-08 (technician side): upload before/after photos and mark the job done.
+     * For an order tied to a registered AC unit, the technician's service notes go into that unit's history.
+     *
+     * @param  array{findings: string|null, actions: string, next_service_date: string|null}|null  $unitRecord
      */
-    public function submitProof(Order $order, TechnicianProfile $technician, UploadedFile $before, UploadedFile $after, ?string $note): void
+    public function submitProof(Order $order, TechnicianProfile $technician, UploadedFile $before, UploadedFile $after, ?string $note, ?array $unitRecord = null): void
     {
         $this->ensureStatus($order, [OrderStatus::Dikerjakan, OrderStatus::PerbaikanUlang]);
         $this->ensureAssigned($order, $technician);
 
-        DB::transaction(function () use ($order, $technician, $before, $after, $note) {
+        DB::transaction(function () use ($order, $technician, $before, $after, $note, $unitRecord) {
             $round = $order->rework_count + 1;
             $directory = "work-proofs/{$order->id}";
 
-            $order->workProofs()->create([
+            $proof = $order->workProofs()->create([
                 'round' => $round,
                 'before_path' => $before->store($directory, 'local'),
                 'after_path' => $after->store($directory, 'local'),
                 'note' => $note,
             ]);
+
+            if ($order->customer_unit_id !== null && $unitRecord !== null) {
+                UnitServiceLog::updateOrCreate(['order_id' => $order->id], [
+                    'customer_unit_id' => $order->customer_unit_id,
+                    'technician_id' => $technician->user_id,
+                    'service_date' => today(),
+                    'service_type' => $order->service->name,
+                    'inspection_findings' => $unitRecord['findings'],
+                    'actions_taken' => $unitRecord['actions'],
+                    'before_photo_path' => $proof->before_path,
+                    'after_photo_path' => $proof->after_path,
+                    'next_recommended_service_date' => $unitRecord['next_service_date'],
+                    'reminder_sent_at' => null,
+                ]);
+            }
 
             $order->proof_submitted_at = now();
             $this->transition($order, OrderStatus::MenungguKonfirmasi, $technician->user, $round > 1 ? 'Bukti baru setelah perbaikan ulang' : null);
@@ -353,6 +372,12 @@ class OrderWorkflow
         $this->transition($order, OrderStatus::Selesai, $actor, $note);
 
         $order->technician?->increment('jobs_count');
+
+        $serviceLog = UnitServiceLog::where('order_id', $order->id)->first();
+
+        if ($serviceLog !== null) {
+            $serviceLog->unit()->update(['last_serviced_at' => $serviceLog->service_date]);
+        }
     }
 
     /**

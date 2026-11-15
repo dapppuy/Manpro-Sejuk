@@ -8,6 +8,11 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Diagnosis extends Model
 {
+    /**
+     * Complaint photos are private: only the customer (and later their technician) may see them.
+     */
+    public const PHOTO_DISK = 'local';
+
     protected $fillable = [
         'user_id',
         'customer_unit_id',

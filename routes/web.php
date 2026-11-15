@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\TechnicianDocumentController;
 use App\Http\Controllers\DashboardRedirectController;
 use App\Http\Controllers\MidtransWebhookController;
 use App\Http\Controllers\OrderMediaController;
+use App\Http\Controllers\UnitPhotoController;
 use App\Http\Controllers\WorkProofPhotoController;
 use App\Http\Middleware\EnsureTechnicianIsApproved;
 use App\Http\Middleware\RedirectNonCustomers;
@@ -18,16 +19,21 @@ Route::middleware([RedirectNonCustomers::class])->group(function () {
 
 Route::post('webhooks/midtrans', MidtransWebhookController::class)->name('webhooks.midtrans');
 
+Route::livewire('u/{qrToken}', 'pages::units.qr')->name('unit.qr.show');
+
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardRedirectController::class)->name('dashboard');
     Route::get('pesanan/media/{media}', OrderMediaController::class)->name('orders.media');
     Route::get('pesanan/bukti/{proof}/{side}', WorkProofPhotoController::class)->name('orders.proofs.photo');
-    Route::get('/cek-ac-pintar', SmartAcCheck::class)->name('customer.smart-check');
+    Route::get('unit-ac/{unit}/foto/{photo}', UnitPhotoController::class)->name('units.photo');
 });
 
 Route::middleware(['auth', RedirectNonCustomers::class, 'verified', 'role:customer'])->group(function () {
     Route::livewire('pesan/{technician}', 'pages::requests.create')->name('requests.create');
+    Route::get('cek-ac-pintar', SmartAcCheck::class)->name('customer.smart-check');
     Route::livewire('akun', 'pages::account')->name('account');
+    Route::livewire('unit-ac', 'pages::units.index')->name('units.index');
+    Route::livewire('unit-ac/{unit}', 'pages::units.show')->name('units.show');
     Route::livewire('pesanan', 'pages::orders.index')->name('orders.index');
     Route::livewire('pesanan/{order}', 'pages::orders.show')->name('orders.show');
     Route::livewire('pesanan/{order}/ulasan', 'pages::reviews.create')->name('reviews.create');

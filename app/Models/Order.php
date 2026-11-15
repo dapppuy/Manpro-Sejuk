@@ -74,7 +74,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'address_detail', 'latitude', 'longitude', 'preferred_date', 'time_window', 'notes', 'warranty', 'warranty_fee',
     'estimate_min', 'estimate_max', 'estimate_note', 'scheduled_date', 'scheduled_window', 'final_total',
     'commission_amount', 'final_cost_submitted_at', 'reminded_day_before_at', 'reminded_hour_before_at', 'status', 'fund_status', 'payout_id', 'response_deadline', 'proof_submitted_at', 'rework_count',
-    'cancelled_reason', 'completed_at',
+    'cancelled_reason', 'completed_at', 'customer_unit_id', 'diagnosis_id',
 ])]
 class Order extends Model
 {

@@ -66,7 +66,7 @@ new #[Layout('layouts::mitra')] class extends Component {
     {
         $this->order->refresh();
         app(OrderWorkflow::class)->expireIfOverdue($this->order);
-        $this->order->load(['service', 'customer', 'media', 'costItems', 'workProofs']);
+        $this->order->load(['service', 'customer', 'media', 'costItems', 'workProofs', 'customerUnit']);
 
         return $this->view()->title('Pesanan #'.$this->order->code);
     }
@@ -212,6 +212,33 @@ new #[Layout('layouts::mitra')] class extends Component {
                     @endif
                 </dl>
             </x-card>
+
+            @if ($order->customerUnit)
+                @php $unitHistory = $order->customerUnit->completedServiceLogs()->with('technician.technicianProfile')->limit(3)->get(); @endphp
+                <x-card class="p-5 sm:p-6">
+                    <div class="flex items-start gap-3">
+                        <flux:icon.qr-code class="mt-1 size-5 shrink-0 text-ice" />
+                        <div class="min-w-0">
+                            <h2 class="text-lg font-bold">Riwayat AC · {{ $order->customerUnit->name }}</h2>
+                            <p class="text-sm text-ink-soft">{{ collect([$order->customerUnit->room_label, $order->customerUnit->specLine()])->filter()->implode(' · ') }}</p>
+                        </div>
+                    </div>
+                    <ol class="mt-4 space-y-3">
+                        @forelse ($unitHistory as $log)
+                            <li wire:key="hist-{{ $log->id }}" class="rounded-xl bg-paper p-3 text-sm">
+                                <p class="font-semibold">{{ $log->service_type }} · {{ $log->service_date->translatedFormat('j M Y') }}</p>
+                                <p class="text-ink-soft">{{ $log->technician?->technicianProfile?->business_name ?? 'Teknisi' }}</p>
+                                @if ($log->inspection_findings)
+                                    <p class="mt-1">Temuan: {{ $log->inspection_findings }}</p>
+                                @endif
+                                <p>Tindakan: {{ $log->actions_taken }}</p>
+                            </li>
+                        @empty
+                            <li class="rounded-xl bg-paper p-3 text-sm text-mute">Belum ada servis tercatat. Catatanmu nanti jadi riwayat pertama unit ini.</li>
+                        @endforelse
+                    </ol>
+                </x-card>
+            @endif
 
             <x-card class="p-5 sm:p-6">
                 <h2 class="text-lg font-bold">Lokasi pelanggan</h2>

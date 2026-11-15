@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Diagnosis;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -48,12 +49,12 @@ class GeminiAcDiagnosisService
 
         $parts[] = ['text' => $prompt];
 
-        if ($stickerPhotoPath && Storage::disk('public')->exists($stickerPhotoPath)) {
+        if ($stickerPhotoPath && Storage::disk(Diagnosis::PHOTO_DISK)->exists($stickerPhotoPath)) {
             $parts[] = ['text' => 'Gambar 1: Foto stiker spesifikasi teknis unit AC.'];
             $parts[] = $this->encodeImagePart($stickerPhotoPath);
         }
 
-        if ($conditionPhotoPath && Storage::disk('public')->exists($conditionPhotoPath)) {
+        if ($conditionPhotoPath && Storage::disk(Diagnosis::PHOTO_DISK)->exists($conditionPhotoPath)) {
             $parts[] = ['text' => 'Gambar 2: Foto kondisi visual unit AC saat ini.'];
             $parts[] = $this->encodeImagePart($conditionPhotoPath);
         }
@@ -251,7 +252,7 @@ class GeminiAcDiagnosisService
      */
     private function encodeImagePart(string $storagePath): array
     {
-        $disk = Storage::disk('public');
+        $disk = Storage::disk(Diagnosis::PHOTO_DISK);
         $fullPath = $disk->path($storagePath);
         $bytes = $disk->get($storagePath);
         $mimeType = @mime_content_type($fullPath) ?: 'image/jpeg';

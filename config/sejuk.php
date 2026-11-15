@@ -81,6 +81,9 @@ return [
     // In local mode, only show simulation buttons for payment (technician steps are done from the technician portal)
     'simulation_payment_only' => (bool) env('SEJUK_SIMULATION_PAYMENT_ONLY', true),
 
+    // Cek AC Pintar: how many AI analyses one customer may run per hour (each one costs a Gemini call).
+    'smart_check_per_hour' => (int) env('SEJUK_SMART_CHECK_PER_HOUR', 10),
+
     // The "Untuk Teknisi" button in the customer header. Hidden for now; the portal stays reachable at /mitra/masuk.
     'show_technician_entry' => (bool) env('SEJUK_SHOW_TECHNICIAN_ENTRY', false),
 

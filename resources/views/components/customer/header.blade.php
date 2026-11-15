@@ -63,6 +63,7 @@
                         @if ($user->isCustomer())
                             <flux:menu.item :href="Route::has('account') ? route('account') : route('profile.edit')" icon="user" wire:navigate>Profil saya</flux:menu.item>
                             <flux:menu.item :href="$ordersUrl" icon="clipboard-list" wire:navigate>Pesanan saya</flux:menu.item>
+                            <flux:menu.item :href="route('units.index')" icon="qr-code" wire:navigate>Unit AC saya</flux:menu.item>
                         @else
                             <flux:menu.item :href="$user->homeRoute()" icon="layout-dashboard">Buka portal</flux:menu.item>
                         @endif

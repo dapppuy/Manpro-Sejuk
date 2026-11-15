@@ -7,9 +7,12 @@ use App\Models\Diagnosis;
 use App\Services\GeminiAcDiagnosisService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Validation\Rule;
 use Livewire\Component;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
+use RuntimeException;
 use Throwable;
 
 class SmartAcCheck extends Component
@@ -72,7 +75,7 @@ class SmartAcCheck extends Component
         $this->errorMessage = null;
 
         $this->validate([
-            'customerUnitId' => ['nullable', 'exists:customer_units,id'],
+            'customerUnitId' => ['nullable', Rule::exists('customer_units', 'id')->where('user_id', Auth::id())],
             'complaintText' => ['required', 'string', 'min:10', 'max:1500'],
             'stickerPhoto' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
             'conditionPhoto' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
@@ -81,10 +84,23 @@ class SmartAcCheck extends Component
             'complaintText.min' => 'Jelaskan keluhan minimal 10 karakter agar AI bisa menganalisis lebih akurat.',
             'stickerPhoto.max' => 'Ukuran foto stiker maksimal 5 MB.',
             'conditionPhoto.max' => 'Ukuran foto kondisi AC maksimal 5 MB.',
+            'customerUnitId.exists' => 'Unit AC tidak ditemukan di akunmu.',
         ]);
 
-        $stickerPath = $this->stickerPhoto?->store('diagnoses/stickers', 'public') ?: null;
-        $conditionPath = $this->conditionPhoto?->store('diagnoses/conditions', 'public') ?: null;
+        $limiterKey = 'smart-check:'.Auth::id();
+        $perHour = (int) config('sejuk.smart_check_per_hour');
+
+        if (RateLimiter::tooManyAttempts($limiterKey, $perHour)) {
+            $minutes = (int) ceil(RateLimiter::availableIn($limiterKey) / 60);
+            $this->errorMessage = "Kamu sudah memakai {$perHour} analisis dalam satu jam terakhir. Coba lagi dalam {$minutes} menit, atau langsung pesan teknisi.";
+
+            return;
+        }
+
+        RateLimiter::hit($limiterKey, 3600);
+
+        $stickerPath = $this->stickerPhoto?->store('diagnoses/stickers', Diagnosis::PHOTO_DISK) ?: null;
+        $conditionPath = $this->conditionPhoto?->store('diagnoses/conditions', Diagnosis::PHOTO_DISK) ?: null;
 
         $unitContext = [];
         if ($this->customerUnitId) {
@@ -124,8 +140,11 @@ class SmartAcCheck extends Component
                 'preliminary_advice' => $parsed['preliminary_advice'] ?? null,
                 'raw_ai_response' => $result['raw'],
             ]);
-        } catch (Throwable $e) {
+        } catch (RuntimeException $e) {
             $this->errorMessage = $e->getMessage();
+        } catch (Throwable $e) {
+            report($e);
+            $this->errorMessage = 'Cek AC Pintar sedang bermasalah. Kamu tetap bisa langsung memesan teknisi.';
         }
     }
 

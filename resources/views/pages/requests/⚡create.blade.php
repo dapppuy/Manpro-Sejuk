@@ -4,8 +4,10 @@ use App\Enums\AcCapacity;
 use App\Enums\OrderStatus;
 use App\Enums\TimeWindow;
 use App\Exceptions\InvalidOrderTransition;
+use App\Models\CustomerUnit;
 use App\Models\Order;
 use App\Models\TechnicianProfile;
+use App\Models\UnitIssueReport;
 use App\Services\Geocoder;
 use App\Services\OrderWorkflow;
 use App\Support\CustomerLocation;
@@ -38,6 +40,11 @@ new #[Layout('layouts::customer'), Title('Minta penawaran')] class extends Compo
     public string $serviceSlug = '';
 
     public ?int $service_id = null;
+
+    /**
+     * The customer's registered AC unit this order is for, so the visit lands in its history.
+     */
+    public ?int $customer_unit_id = null;
 
     public string $ac_capacity = '';
 
@@ -76,6 +83,13 @@ new #[Layout('layouts::customer'), Title('Minta penawaran')] class extends Compo
         }
 
         $this->service_id = $this->offeredServices->firstWhere('slug', $this->serviceSlug)?->id ?? $this->offeredServices->first()?->id;
+
+        $chosenUnit = session('sejuk.order_unit');
+
+        if (is_int($chosenUnit) && $this->units->contains('id', $chosenUnit)) {
+            $this->customer_unit_id = $chosenUnit;
+            $this->updatedCustomerUnitId();
+        }
 
         $current = $location->current(auth()->user());
         $this->address = $current['address'] ?? '';
@@ -150,6 +164,35 @@ new #[Layout('layouts::customer'), Title('Minta penawaran')] class extends Compo
         ]));
     }
 
+    /**
+     * @return \Illuminate\Database\Eloquent\Collection<int, CustomerUnit>
+     */
+    #[Computed]
+    public function units(): \Illuminate\Database\Eloquent\Collection
+    {
+        return auth()->user()->customerUnits()->orderBy('name')->get();
+    }
+
+    /**
+     * Fill brand and capacity from the chosen unit when they are known.
+     */
+    public function updatedCustomerUnitId(): void
+    {
+        $unit = $this->units->firstWhere('id', $this->customer_unit_id);
+
+        if ($unit === null) {
+            return;
+        }
+
+        if (AcCapacity::tryFrom((string) $unit->capacity_pk) !== null) {
+            $this->ac_capacity = (string) $unit->capacity_pk;
+        }
+
+        if (in_array($unit->brand, config('sejuk.brands'), true)) {
+            $this->ac_brand = (string) $unit->brand;
+        }
+    }
+
     public function updatedNewMedia(): void
     {
         $this->validate([
@@ -178,6 +221,7 @@ new #[Layout('layouts::customer'), Title('Minta penawaran')] class extends Compo
     {
         return [
             'service_id' => ['required', Rule::in($this->offeredServices->pluck('id')->all())],
+            'customer_unit_id' => ['nullable', Rule::in($this->units->pluck('id')->all())],
             'ac_capacity' => ['required', Rule::enum(AcCapacity::class)],
             'ac_brand' => ['required', Rule::in(config('sejuk.brands'))],
             'ac_brand_other' => ['required_if:ac_brand,Lainnya', 'nullable', 'string', 'max:50'],
@@ -226,6 +270,7 @@ new #[Layout('layouts::customer'), Title('Minta penawaran')] class extends Compo
 
         $details = [
             'service_id' => $validated['service_id'],
+            'customer_unit_id' => $validated['customer_unit_id'] ?? null,
             'ac_capacity' => $validated['ac_capacity'],
             'ac_brand' => $validated['ac_brand'],
             'ac_brand_other' => $validated['ac_brand'] === 'Lainnya' ? $validated['ac_brand_other'] : null,
@@ -253,7 +298,13 @@ new #[Layout('layouts::customer'), Title('Minta penawaran')] class extends Compo
         }
 
         $location->set($validated['address'], $details['latitude'], $details['longitude'], detail: $details['address_detail']);
-        session()->forget(['sejuk.hidden_technicians', 'sejuk.rejected_notice', 'sejuk.pending_order']);
+        session()->forget(['sejuk.hidden_technicians', 'sejuk.rejected_notice', 'sejuk.pending_order', 'sejuk.order_unit']);
+
+        if ($order->customer_unit_id !== null) {
+            $order->customerUnit?->issueReports()
+                ->where('status', UnitIssueReport::STATUS_WAITING)
+                ->update(['status' => UnitIssueReport::STATUS_ORDERED, 'order_id' => $order->id]);
+        }
 
         $this->redirectRoute('orders.show', $order, navigate: true);
     }
@@ -271,6 +322,7 @@ new #[Layout('layouts::customer'), Title('Minta penawaran')] class extends Compo
     private function fillFromOrder(Order $order): void
     {
         $this->service_id = $this->offeredServices->contains('id', $order->service_id) ? $order->service_id : $this->offeredServices->first()?->id;
+        $this->customer_unit_id = $order->customer_unit_id;
         $this->ac_capacity = $order->ac_capacity->value;
         $this->ac_brand = $order->ac_brand;
         $this->ac_brand_other = (string) $order->ac_brand_other;
@@ -327,9 +379,25 @@ new #[Layout('layouts::customer'), Title('Minta penawaran')] class extends Compo
                     @error('service_id') <p class="mt-1.5 text-xs font-medium text-coral">{{ $message }}</p> @enderror
                 </div>
 
+                <div>
+                    <label for="unit" class="mb-2 block text-sm font-semibold">Unit AC <span class="font-normal text-mute">(opsional)</span></label>
+                    @if ($this->units->isNotEmpty())
+                        <select id="unit" wire:model.live="customer_unit_id" class="{{ $inputClass }} ring-line">
+                            <option value="">AC lain / belum didaftarkan</option>
+                            @foreach ($this->units as $unit)
+                                <option wire:key="unit-{{ $unit->id }}" value="{{ $unit->id }}">{{ $unit->name }}{{ $unit->room_label ? ' · '.$unit->room_label : '' }}</option>
+                            @endforeach
+                        </select>
+                        <p class="mt-1.5 text-xs text-mute">Catatan servis dari teknisi akan masuk ke riwayat unit ini.</p>
+                    @else
+                        <p class="rounded-xl bg-paper px-4 py-3 text-sm text-ink-soft">Daftarkan AC di <a href="{{ route('units.index') }}" class="font-semibold text-ice hover:underline">Unit AC saya</a> supaya riwayat servisnya tercatat.</p>
+                    @endif
+                    @error('customer_unit_id') <p class="mt-1.5 text-xs font-medium text-coral">{{ $message }}</p> @enderror
+                </div>
+
                 <div class="grid gap-6 sm:grid-cols-2">
                     <div>
-                        <label for="pk" class="mb-2 block text-sm font-semibold">Kapasitas (PK)<span class="ml-0.5 text-coral">*</span></label>
+                        <label for="pk"class="mb-2 block text-sm font-semibold">Kapasitas (PK)<span class="ml-0.5 text-coral">*</span></label>
                         <select id="pk" wire:model.live="ac_capacity" @class([$inputClass, 'ring-line', 'text-mute' => $ac_capacity === ''])>
                             <option value="">Pilih kapasitas</option>
                             @foreach (AcCapacity::cases() as $capacity)
