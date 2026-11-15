@@ -25,16 +25,25 @@ class UnitServiceLog extends Model
         'next_recommended_service_date' => 'date',
     ];
 
+    /**
+     * @return BelongsTo<CustomerUnit, $this>
+     */
     public function unit(): BelongsTo
     {
         return $this->belongsTo(CustomerUnit::class, 'customer_unit_id');
     }
 
+    /**
+     * @return BelongsTo<Order, $this>
+     */
     public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);
     }
 
+    /**
+     * @return BelongsTo<User, $this>
+     */
     public function technician(): BelongsTo
     {
         return $this->belongsTo(User::class, 'technician_id');

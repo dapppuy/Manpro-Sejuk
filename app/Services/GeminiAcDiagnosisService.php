@@ -11,6 +11,10 @@ use RuntimeException;
 
 class GeminiAcDiagnosisService
 {
+    /**
+     * @param  array<string, mixed>  $knownUnitContext
+     * @return array{parsed: array<mixed>, raw: mixed, model_used: string}
+     */
     public function analyze(
         string $complaintText,
         ?string $stickerPhotoPath = null,
@@ -30,16 +34,16 @@ class GeminiAcDiagnosisService
         $parts = [];
 
         $prompt = "Kamu adalah asisten diagnostik awal teknisi AC profesional untuk platform Sejuk.\n"
-            . "Analisis keluhan pelanggan beserta foto stiker spesifikasi dan/atau foto kondisi unit AC jika dilampirkan.\n"
-            . "Aturan wajib:\n"
-            . "1. Hasil ini adalah PERKIRAAN AWAL untuk membantu pelanggan memahami kemungkinan gangguan dan memberi konteks ke teknisi, BUKAN pengganti pemeriksaan fisik teknisi.\n"
-            . "2. Jika foto stiker spesifikasi dilampirkan, ekstrak merek, kapasitas PK, dan tipe refrigeran/freon. Jika tidak ada foto stiker, isi dengan 'Tidak terdeteksi' atau gunakan data unit tersimpan.\n"
-            . "3. Pilih kategori layanan yang paling sesuai dari salah satu slug berikut: 'cuci-ac', 'perbaikan', 'bongkar-pasang', atau 'servis-berkala'.\n"
-            . "4. Gunakan bahasa Indonesia yang jelas, ringkas, dan mudah dipahami orang awam.\n\n"
-            . "Keluhan Pelanggan: {$complaintText}\n";
+            ."Analisis keluhan pelanggan beserta foto stiker spesifikasi dan/atau foto kondisi unit AC jika dilampirkan.\n"
+            ."Aturan wajib:\n"
+            ."1. Hasil ini adalah PERKIRAAN AWAL untuk membantu pelanggan memahami kemungkinan gangguan dan memberi konteks ke teknisi, BUKAN pengganti pemeriksaan fisik teknisi.\n"
+            ."2. Jika foto stiker spesifikasi dilampirkan, ekstrak merek, kapasitas PK, dan tipe refrigeran/freon. Jika tidak ada foto stiker, isi dengan 'Tidak terdeteksi' atau gunakan data unit tersimpan.\n"
+            ."3. Pilih kategori layanan yang paling sesuai dari salah satu slug berikut: 'cuci-ac', 'perbaikan', 'bongkar-pasang', atau 'servis-berkala'.\n"
+            ."4. Gunakan bahasa Indonesia yang jelas, ringkas, dan mudah dipahami orang awam.\n\n"
+            ."Keluhan Pelanggan: {$complaintText}\n";
 
-        if (!empty($knownUnitContext)) {
-            $prompt .= "Data Unit Tersimpan: " . json_encode($knownUnitContext, JSON_UNESCAPED_UNICODE) . "\n";
+        if (! empty($knownUnitContext)) {
+            $prompt .= 'Data Unit Tersimpan: '.json_encode($knownUnitContext, JSON_UNESCAPED_UNICODE)."\n";
         }
 
         $parts[] = ['text' => $prompt];
@@ -63,8 +67,8 @@ class GeminiAcDiagnosisService
 
             try {
                 $response = Http::withOptions([
-                        'force_ip_resolve' => 'v4',
-                    ])
+                    'force_ip_resolve' => 'v4',
+                ])
                     ->connectTimeout(6)
                     ->timeout(12)
                     ->acceptJson()
@@ -74,6 +78,7 @@ class GeminiAcDiagnosisService
                     'message' => $e->getMessage(),
                 ]);
                 $lastErrorDetail = "Timeout pada {$modelName}: {$e->getMessage()}";
+
                 continue;
             }
 
@@ -101,7 +106,7 @@ class GeminiAcDiagnosisService
             ]);
 
             // Lanjut ke model cadangan jika overload (503), rate limit (429), not found (404), atau bad request parameter (400)
-            if (!in_array($status, [400, 404, 429, 503], true)) {
+            if (! in_array($status, [400, 404, 429, 503], true)) {
                 break;
             }
         }
@@ -117,6 +122,9 @@ class GeminiAcDiagnosisService
         throw new RuntimeException('Layanan Cek AC Pintar sedang sibuk. Kamu tetap bisa melanjutkan pemesanan teknisi secara langsung.');
     }
 
+    /**
+     * @return list<string>
+     */
     private function getCandidateModels(string $baseUrl, string $apiKey, string $primaryModel): array
     {
         $availableFlashModels = Cache::remember('gemini_available_flash_models_v2', 3600, function () use ($baseUrl, $apiKey) {
@@ -130,34 +138,37 @@ class GeminiAcDiagnosisService
                     return [];
                 }
 
-                return collect($res->json('models', []))
-                    ->filter(function (array $m) {
-                        $name = $m['name'] ?? '';
-                        $methods = $m['supportedGenerationMethods'] ?? [];
+                $models = $res->json('models');
+                $names = [];
 
-                        return in_array('generateContent', $methods, true)
-                            && str_contains($name, 'flash')
-                            && !str_contains($name, 'image')
-                            && !str_contains($name, 'tts')
-                            && !str_contains($name, 'audio');
-                    })
-                    ->map(fn (array $m) => str_replace('models/', '', $m['name']))
-                    ->sortDesc()
-                    ->values()
-                    ->all();
+                foreach (is_array($models) ? $models : [] as $model) {
+                    $name = is_array($model) && is_string($model['name'] ?? null) ? $model['name'] : '';
+                    $methods = is_array($model) && is_array($model['supportedGenerationMethods'] ?? null) ? $model['supportedGenerationMethods'] : [];
+
+                    if (in_array('generateContent', $methods, true)
+                        && str_contains($name, 'flash')
+                        && ! str_contains($name, 'image')
+                        && ! str_contains($name, 'tts')
+                        && ! str_contains($name, 'audio')) {
+                        $names[] = str_replace('models/', '', $name);
+                    }
+                }
+
+                rsort($names);
+
+                return $names;
             } catch (\Throwable) {
                 return [];
             }
         });
 
-        return collect([$primaryModel])
-            ->merge($availableFlashModels)
-            ->unique()
-            ->take(5)
-            ->values()
-            ->all();
+        return array_slice(array_values(array_unique([$primaryModel, ...$availableFlashModels])), 0, 5);
     }
 
+    /**
+     * @param  list<array<string, mixed>>  $parts
+     * @return array<string, mixed>
+     */
     private function buildPayload(array $parts, string $modelName): array
     {
         $generationConfig = [
@@ -235,6 +246,9 @@ class GeminiAcDiagnosisService
         ];
     }
 
+    /**
+     * @return array{inlineData: array{mimeType: string, data: string}}
+     */
     private function encodeImagePart(string $storagePath): array
     {
         $disk = Storage::disk('public');
@@ -258,7 +272,7 @@ class GeminiAcDiagnosisService
                 $compressedBytes = ob_get_clean();
                 unset($image);
 
-                if (!empty($compressedBytes)) {
+                if (! empty($compressedBytes)) {
                     $bytes = $compressedBytes;
                     $mimeType = 'image/jpeg';
                 }

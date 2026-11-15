@@ -5,9 +5,10 @@ namespace App\Livewire\Customer;
 use App\Models\CustomerUnit;
 use App\Models\Diagnosis;
 use App\Services\GeminiAcDiagnosisService;
+use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Route;
 use Livewire\Component;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
 use Throwable;
 
@@ -16,11 +17,15 @@ class SmartAcCheck extends Component
     use WithFileUploads;
 
     public ?int $customerUnitId = null;
+
     public string $complaintText = '';
-    public $stickerPhoto;
-    public $conditionPhoto;
+
+    public ?TemporaryUploadedFile $stickerPhoto = null;
+
+    public ?TemporaryUploadedFile $conditionPhoto = null;
 
     public ?Diagnosis $diagnosis = null;
+
     public ?string $errorMessage = null;
 
     public function mount(): void
@@ -78,13 +83,8 @@ class SmartAcCheck extends Component
             'conditionPhoto.max' => 'Ukuran foto kondisi AC maksimal 5 MB.',
         ]);
 
-        $stickerPath = $this->stickerPhoto
-            ? $this->stickerPhoto->store('diagnoses/stickers', 'public')
-            : null;
-
-        $conditionPath = $this->conditionPhoto
-            ? $this->conditionPhoto->store('diagnoses/conditions', 'public')
-            : null;
+        $stickerPath = $this->stickerPhoto?->store('diagnoses/stickers', 'public') ?: null;
+        $conditionPath = $this->conditionPhoto?->store('diagnoses/conditions', 'public') ?: null;
 
         $unitContext = [];
         if ($this->customerUnitId) {
@@ -129,7 +129,7 @@ class SmartAcCheck extends Component
         }
     }
 
-    public function proceedToSearchTechnician()
+    public function proceedToSearchTechnician(): void
     {
         $params = $this->diagnosis ? [
             'service' => $this->diagnosis->recommended_service_slug,
@@ -137,16 +137,10 @@ class SmartAcCheck extends Component
             'unit_id' => $this->diagnosis->customer_unit_id,
         ] : [];
 
-        foreach (['customer.search', 'customer.technicians', 'technicians.index', 'search'] as $routeName) {
-            if (Route::has($routeName)) {
-                return redirect()->route($routeName, $params);
-            }
-        }
-
-        return redirect()->to('/cari-teknisi?' . http_build_query(array_filter($params)));
+        $this->redirectRoute('search', $params);
     }
 
-    public function render()
+    public function render(): View
     {
         $units = CustomerUnit::where('user_id', Auth::id())->get();
 

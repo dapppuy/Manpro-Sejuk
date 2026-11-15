@@ -38,21 +38,33 @@ class CustomerUnit extends Model
         });
     }
 
+    /**
+     * @return BelongsTo<User, $this>
+     */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
+    /**
+     * @return HasMany<UnitServiceLog, $this>
+     */
     public function serviceLogs(): HasMany
     {
         return $this->hasMany(UnitServiceLog::class)->orderByDesc('service_date');
     }
 
+    /**
+     * @return HasMany<UnitIssueReport, $this>
+     */
     public function issueReports(): HasMany
     {
         return $this->hasMany(UnitIssueReport::class)->latest();
     }
 
+    /**
+     * @return HasMany<Diagnosis, $this>
+     */
     public function diagnoses(): HasMany
     {
         return $this->hasMany(Diagnosis::class)->latest();

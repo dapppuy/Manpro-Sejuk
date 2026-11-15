@@ -34,16 +34,25 @@ class Diagnosis extends Model
         'is_accurate' => 'boolean',
     ];
 
+    /**
+     * @return BelongsTo<User, $this>
+     */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
+    /**
+     * @return BelongsTo<CustomerUnit, $this>
+     */
     public function unit(): BelongsTo
     {
         return $this->belongsTo(CustomerUnit::class, 'customer_unit_id');
     }
 
+    /**
+     * @return HasOne<Order, $this>
+     */
     public function order(): HasOne
     {
         return $this->hasOne(Order::class);

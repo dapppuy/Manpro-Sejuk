@@ -316,11 +316,17 @@ class Order extends Model
         return collect([$this->address, $this->address_detail])->filter()->implode(', ');
     }
 
+    /**
+     * @return BelongsTo<CustomerUnit, $this>
+     */
     public function customerUnit(): BelongsTo
     {
         return $this->belongsTo(CustomerUnit::class, 'customer_unit_id');
     }
 
+    /**
+     * @return BelongsTo<Diagnosis, $this>
+     */
     public function diagnosis(): BelongsTo
     {
         return $this->belongsTo(Diagnosis::class);

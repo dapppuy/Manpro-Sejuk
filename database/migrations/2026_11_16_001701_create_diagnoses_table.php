@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        if (!Schema::hasTable('customer_units')) {
+        if (! Schema::hasTable('customer_units')) {
             Schema::create('customer_units', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('user_id')->constrained()->cascadeOnDelete();
@@ -50,11 +50,11 @@ return new class extends Migration
         });
 
         Schema::table('orders', function (Blueprint $table) {
-            if (!Schema::hasColumn('orders', 'customer_unit_id')) {
+            if (! Schema::hasColumn('orders', 'customer_unit_id')) {
                 $table->foreignId('customer_unit_id')->nullable()
                     ->constrained('customer_units')->nullOnDelete();
             }
-            if (!Schema::hasColumn('orders', 'diagnosis_id')) {
+            if (! Schema::hasColumn('orders', 'diagnosis_id')) {
                 $table->foreignId('diagnosis_id')->nullable()
                     ->constrained('diagnoses')->nullOnDelete();
             }
