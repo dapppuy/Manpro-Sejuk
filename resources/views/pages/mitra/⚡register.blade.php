@@ -213,29 +213,41 @@ new #[Layout('layouts::customer'), Title('Daftar Sejuk Mitra')] class extends Co
         </x-card>
 
         <x-card class="p-5 sm:p-7">
-            <x-section-title icon="award" title="Bukti kompetensi" description="Pilih salah satu: sertifikat teknisi atau pengalaman kerja yang dapat diperiksa." />
+            <x-section-title icon="award" title="Bukti kompetensi" description="Pilih salah satu: sertifikat teknisi (jalur cepat) atau pengalaman kerja (verifikasi video call)." />
             <div class="mt-6 grid gap-3 sm:grid-cols-2">
-                <button type="button" wire:click="$set('competency', 'certificate')" @class(['rounded-2xl p-5 text-left ring-1', 'bg-frost ring-ice' => $competency === 'certificate', 'bg-white ring-line' => $competency !== 'certificate']) aria-pressed="{{ $competency === 'certificate' ? 'true' : 'false' }}">
-                    <flux:icon.file-check-corner class="size-5 text-ice" />
+                <button type="button" wire:click="$set('competency', 'certificate')" @class(['rounded-2xl p-5 text-left ring-1 transition', 'bg-frost ring-ice' => $competency === 'certificate', 'bg-white ring-line hover:bg-paper/50' => $competency !== 'certificate']) aria-pressed="{{ $competency === 'certificate' ? 'true' : 'false' }}">
+                    <div class="flex items-center justify-between">
+                        <flux:icon.file-check-corner class="size-5 text-ice" />
+                        <span class="rounded-full bg-leaf-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-leaf">Jalur Cepat</span>
+                    </div>
                     <span class="mt-3 block font-bold">Saya punya sertifikat</span>
-                    <span class="mt-1 block text-xs text-mute">Sertifikat BNSP, pelatihan refrigerasi, atau dokumen kompetensi lain.</span>
+                    <span class="mt-1 block text-xs text-mute">Verifikasi dokumen cepat tanpa wawancara video call. Lampirkan sertifikat BNSP, BLK, atau sertifikasi pendingin.</span>
                 </button>
-                <button type="button" wire:click="$set('competency', 'experience')" @class(['rounded-2xl p-5 text-left ring-1', 'bg-frost ring-ice' => $competency === 'experience', 'bg-white ring-line' => $competency !== 'experience']) aria-pressed="{{ $competency === 'experience' ? 'true' : 'false' }}">
-                    <flux:icon.briefcase-business class="size-5 text-ice" />
+                <button type="button" wire:click="$set('competency', 'experience')" @class(['rounded-2xl p-5 text-left ring-1 transition', 'bg-frost ring-ice' => $competency === 'experience', 'bg-white ring-line hover:bg-paper/50' => $competency !== 'experience']) aria-pressed="{{ $competency === 'experience' ? 'true' : 'false' }}">
+                    <div class="flex items-center justify-between">
+                        <flux:icon.briefcase-business class="size-5 text-ice" />
+                        <span class="rounded-full bg-sun-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sun-ink">Perlu Video Call</span>
+                    </div>
                     <span class="mt-3 block font-bold">Saya punya pengalaman</span>
-                    <span class="mt-1 block text-xs text-mute">Jelaskan pengalaman servis dan cantumkan referensi pekerjaan.</span>
+                    <span class="mt-1 block text-xs text-mute">Khusus teknisi berpengalaman tanpa sertifikat. Memerlukan video call singkat (2–3 menit) untuk verifikasi alat kerja.</span>
                 </button>
             </div>
 
             @if ($competency === 'certificate')
                 <div class="mt-5">
-                    <x-form.document-upload label="Sertifikat kompetensi" name="certificate" :file="$certificate" hint="PDF, JPG, atau PNG, maks. 10 MB." accept=".pdf,image/png,image/jpeg" wire:model="certificate" />
+                    <x-form.document-upload label="Sertifikat kompetensi" name="certificate" :file="$certificate" hint="PDF, JPG, atau PNG, maks. 10 MB. Pastikan nama dan lembaga penerbit terbaca jelas." accept=".pdf,image/png,image/jpeg" wire:model="certificate" />
                 </div>
             @else
-                <div class="mt-5 grid gap-5 sm:grid-cols-2">
-                    <x-form.input label="Lama pengalaman (tahun)" name="experience_years" type="number" min="0" max="60" wire:model.live.debounce.300ms="experience_years" placeholder="5" required />
-                    <x-form.input label="Nomor referensi pelanggan/usaha" name="reference_phone" type="tel" wire:model.live.debounce.300ms="reference_phone" placeholder="0813 9876 2210" required />
-                    <x-form.textarea class="sm:col-span-2" label="Ceritakan pengalaman kerja" name="experience_description" rows="5" wire:model.live.debounce.400ms="experience_description" placeholder="Misal: menangani servis AC rumah dan kos sejak 2020, termasuk cuci rutin dan perbaikan kebocoran." required />
+                <div class="mt-5 space-y-4">
+                    <div class="flex items-start gap-2.5 rounded-xl bg-sun-soft/40 p-4 text-xs text-ink-soft ring-1 ring-sun-ink/20">
+                        <flux:icon.video-camera class="mt-0.5 size-4 shrink-0 text-sun-ink" />
+                        <span>Pastikan nomor WhatsApp aktif. Setelah pendaftaran dikirim, Admin Sejuk akan menghubungi Anda melalui <strong>Video Call WhatsApp</strong> untuk memverifikasi alat kerja fisik dan keaslian pengalaman.</span>
+                    </div>
+                    <div class="grid gap-5 sm:grid-cols-2">
+                        <x-form.input label="Lama pengalaman (tahun)" name="experience_years" type="number" min="0" max="60" wire:model.live.debounce.300ms="experience_years" placeholder="5" required />
+                        <x-form.input label="Nomor referensi pelanggan/usaha" name="reference_phone" type="tel" wire:model.live.debounce.300ms="reference_phone" placeholder="0813 9876 2210" required />
+                        <x-form.textarea class="sm:col-span-2" label="Ceritakan pengalaman kerja" name="experience_description" rows="5" wire:model.live.debounce.400ms="experience_description" placeholder="Misal: menangani servis AC rumah dan kos sejak 2020, termasuk cuci rutin dan perbaikan kebocoran." required />
+                    </div>
                 </div>
             @endif
         </x-card>

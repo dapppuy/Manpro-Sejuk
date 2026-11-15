@@ -66,10 +66,6 @@
             </nav>
 
             <div class="space-y-1 border-t border-white/10 p-3">
-                <a href="{{ route('home') }}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-white/70 hover:bg-white/10 hover:text-white">
-                    <flux:icon.external-link class="size-[18px]" />
-                    Situs pelanggan
-                </a>
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf
                     <button type="submit" class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-white/70 hover:bg-white/10 hover:text-white">

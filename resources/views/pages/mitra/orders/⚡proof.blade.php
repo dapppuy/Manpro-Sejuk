@@ -145,7 +145,7 @@ new #[Layout('layouts::mitra'), Title('Upload Bukti Kerja')] class extends Compo
             </div>
 
             <div class="border-t border-line pt-6">
-                <x-button type="submit" size="lg" icon-trailing="arrow-right" :disabled="! $before || ! $after" wire:loading.attr="disabled" wire:target="submit,before,after">Tandai Selesai</x-button>
+                <x-button type="submit" size="lg" icon-trailing="arrow-right" :disabled="! $before || ! $after" wire:target="submit,before,after">Tandai Selesai</x-button>
             </div>
         </form>
     </x-card>

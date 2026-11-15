@@ -6,11 +6,14 @@ use App\Http\Controllers\MidtransWebhookController;
 use App\Http\Controllers\OrderMediaController;
 use App\Http\Controllers\WorkProofPhotoController;
 use App\Http\Middleware\EnsureTechnicianIsApproved;
+use App\Http\Middleware\RedirectNonCustomers;
 use Illuminate\Support\Facades\Route;
 
-Route::livewire('/', 'pages::home')->name('home');
-Route::livewire('cari', 'pages::search')->name('search');
-Route::livewire('teknisi/{technician}', 'pages::technicians.show')->name('technicians.show');
+Route::middleware([RedirectNonCustomers::class])->group(function () {
+    Route::livewire('/', 'pages::home')->name('home');
+    Route::livewire('cari', 'pages::search')->name('search');
+    Route::livewire('teknisi/{technician}', 'pages::technicians.show')->name('technicians.show');
+});
 
 Route::post('webhooks/midtrans', MidtransWebhookController::class)->name('webhooks.midtrans');
 
@@ -20,7 +23,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('pesanan/bukti/{proof}/{side}', WorkProofPhotoController::class)->name('orders.proofs.photo');
 });
 
-Route::middleware(['auth', 'role:customer'])->group(function () {
+Route::middleware(['auth', RedirectNonCustomers::class, 'role:customer'])->group(function () {
     Route::livewire('pesan/{technician}', 'pages::requests.create')->name('requests.create');
     Route::livewire('akun', 'pages::account')->name('account');
     Route::livewire('pesanan', 'pages::orders.index')->name('orders.index');

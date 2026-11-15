@@ -625,9 +625,11 @@ new #[Layout('layouts::customer')] class extends Component {
             @endswitch
         </div>
 
-        @if (OrderSimulator::isEnabled())
+        {{-- @if (OrderSimulator::isEnabled())
             <x-order.simulator :actions="app(OrderSimulator::class)->actionsFor($order)" class="lg:col-start-1 lg:row-start-2" />
-        @endif
+        @endif --}}
+        <div class="lg:col-start-1 lg:row-start-2">
+        </div>
 
         <aside class="h-fit space-y-4 lg:sticky lg:top-24 lg:row-span-2 lg:row-start-1">
             @if ($technician)
