@@ -37,8 +37,6 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $verified_at
  * @property bool $is_active
  * @property bool $is_accepting_orders
- * @property bool $is_promoted
- * @property Carbon|null $promoted_until
  * @property int|null $avg_response_minutes
  * @property float $rating_avg
  * @property int $reviews_count
@@ -59,7 +57,7 @@ use Illuminate\Support\Carbon;
 #[Fillable([
     'business_name', 'slug', 'bio', 'years_experience', 'jobs_count', 'service_radius_km', 'base_area',
     'latitude', 'longitude', 'badge', 'verification_status', 'verification_note', 'verified_at', 'is_active',
-    'is_accepting_orders', 'is_promoted', 'promoted_until', 'avg_response_minutes', 'rating_avg', 'reviews_count',
+    'is_accepting_orders', 'avg_response_minutes', 'rating_avg', 'reviews_count',
 ])]
 class TechnicianProfile extends Model
 {
@@ -84,8 +82,6 @@ class TechnicianProfile extends Model
             'verified_at' => 'datetime',
             'is_active' => 'boolean',
             'is_accepting_orders' => 'boolean',
-            'is_promoted' => 'boolean',
-            'promoted_until' => 'datetime',
             'rating_avg' => 'float',
         ];
     }
@@ -96,7 +92,7 @@ class TechnicianProfile extends Model
     }
 
     /**
-     * Technicians customers can find and book.
+     * Technicians customers can find and book: approved, active, and with a verified badge.
      *
      * @param  Builder<self>  $query
      */
@@ -104,12 +100,15 @@ class TechnicianProfile extends Model
     protected function published(Builder $query): void
     {
         $query->where('verification_status', VerificationStatus::Approved)
-            ->where('is_active', true);
+            ->where('is_active', true)
+            ->whereIn('badge', TechnicianBadge::verified());
     }
 
-    public function isPromotedNow(): bool
+    public function isPublished(): bool
     {
-        return $this->is_promoted && ($this->promoted_until === null || $this->promoted_until->isFuture());
+        return $this->verification_status === VerificationStatus::Approved
+            && $this->is_active
+            && $this->badge->isVerified();
     }
 
     /**

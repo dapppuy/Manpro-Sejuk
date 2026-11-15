@@ -55,7 +55,6 @@ class TechnicianSearch
             ->filter(fn (TechnicianProfile $technician) => ! $availableToday || $technician->isAvailableToday());
 
         $sorted = $filtered->sortBy(fn (TechnicianProfile $technician) => [
-            $technician->isPromotedNow() ? 0 : 1,
             match ($sort) {
                 self::SORT_NEAREST => $technician->distanceKm,
                 self::SORT_RATING => -$technician->rating_avg,

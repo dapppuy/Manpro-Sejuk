@@ -35,12 +35,11 @@ class TechnicianProfileFactory extends Factory
             'base_area' => 'Lowokwaru',
             'latitude' => -7.9666,
             'longitude' => 112.6326,
-            'badge' => TechnicianBadge::Terdaftar,
+            'badge' => TechnicianBadge::Identitas,
             'verification_status' => VerificationStatus::Approved,
             'verified_at' => now(),
             'is_active' => true,
             'is_accepting_orders' => true,
-            'is_promoted' => false,
             'avg_response_minutes' => 5,
             'rating_avg' => 4.5,
             'reviews_count' => 0,
@@ -50,6 +49,7 @@ class TechnicianProfileFactory extends Factory
     public function pending(): static
     {
         return $this->state(fn (array $attributes) => [
+            'badge' => TechnicianBadge::Terdaftar,
             'verification_status' => VerificationStatus::Pending,
             'verified_at' => null,
             'is_accepting_orders' => false,
@@ -60,13 +60,6 @@ class TechnicianProfileFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'badge' => $badge,
-        ]);
-    }
-
-    public function promoted(): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'is_promoted' => true,
         ]);
     }
 

@@ -184,10 +184,9 @@ new #[Layout('layouts::customer'), Title('Cari teknisi AC')] class extends Compo
                 </div>
             </div>
             <div>
-                <p class="mb-2.5 text-xs font-bold tracking-wider text-mute uppercase">Badge minimal</p>
+                <p class="mb-2.5 text-xs font-bold tracking-wider text-mute uppercase">Badge</p>
                 <div class="flex flex-wrap gap-2">
-                    <x-chip :active="$badge === ''" wire:click="$set('badge', '')">Semua</x-chip>
-                    <x-chip :active="$badge === 'identitas'" wire:click="$set('badge', 'identitas')">Terverifikasi</x-chip>
+                    <x-chip :active="$badge === ''" wire:click="$set('badge', '')">Semua terverifikasi</x-chip>
                     <x-chip :active="$badge === 'sertifikat'" wire:click="$set('badge', 'sertifikat')">Bersertifikat</x-chip>
                 </div>
             </div>

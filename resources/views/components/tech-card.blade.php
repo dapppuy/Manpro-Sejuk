@@ -7,20 +7,16 @@
 
 @php
     /** @var \App\Models\TechnicianProfile $technician */
-    $promoted = $technician->isPromotedNow();
     $today = $technician->isAvailableToday();
     $slot = $technician->nextSlot();
 @endphp
 
 <a href="{{ $href }}" wire:navigate {{ $attributes->class([
-    'group flex w-full items-center gap-4 rounded-2xl bg-white p-3.5 text-left ring-1 transition hover:shadow-lg hover:shadow-ink/5 sm:gap-5 sm:p-4',
-    'ring-sun/70' => $promoted,
-    'ring-line hover:ring-ink/20' => ! $promoted,
+    'group flex w-full items-center gap-4 rounded-2xl bg-white p-3.5 text-left ring-1 ring-line transition hover:shadow-lg hover:shadow-ink/5 hover:ring-ink/20 sm:gap-5 sm:p-4',
 ]) }}>
     <x-avatar :name="$technician->user->name" :src="$technician->user->avatarUrl()" class="!size-20 shrink-0 rounded-xl !text-xl sm:!size-28" />
     <div class="min-w-0 flex-1">
         <div class="flex flex-wrap items-center gap-2">
-            @if ($promoted) <x-promo-label /> @endif
             <x-badge-chip :badge="$technician->badge" />
         </div>
         <h3 class="mt-1.5 truncate text-base font-bold sm:text-lg">{{ $technician->business_name }}</h3>

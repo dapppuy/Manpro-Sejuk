@@ -27,7 +27,7 @@ new #[Layout('layouts::admin'), Title('Detail verifikasi')] class extends Compon
 
     public function approve(ReviewTechnicianVerification $review): void
     {
-        $this->validate(['badge' => ['required', Rule::enum(TechnicianBadge::class)]]);
+        $this->validate(['badge' => ['required', Rule::enum(TechnicianBadge::class)->only(TechnicianBadge::verified())]]);
 
         $review->approve($this->technician, TechnicianBadge::from($this->badge), auth()->user());
 
@@ -205,7 +205,7 @@ new #[Layout('layouts::admin'), Title('Detail verifikasi')] class extends Compon
                     </div>
                 @endif
                 <div class="mt-4 space-y-2">
-                    @foreach (TechnicianBadge::cases() as $case)
+                    @foreach (TechnicianBadge::verified() as $case)
                         <label wire:key="badge-{{ $case->value }}" class="flex cursor-pointer items-start gap-3 rounded-xl p-3 ring-1 ring-line has-checked:bg-frost has-checked:ring-ice">
                             <input type="radio" wire:model="badge" value="{{ $case->value }}" class="mt-1 size-4 accent-ice" />
                             <span>

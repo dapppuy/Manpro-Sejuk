@@ -3,7 +3,6 @@
 use App\Enums\AcCapacity;
 use App\Enums\OrderStatus;
 use App\Enums\TimeWindow;
-use App\Enums\VerificationStatus;
 use App\Exceptions\InvalidOrderTransition;
 use App\Models\Order;
 use App\Models\TechnicianProfile;
@@ -66,7 +65,7 @@ new #[Layout('layouts::customer'), Title('Minta penawaran')] class extends Compo
 
     public function mount(TechnicianProfile $technician, CustomerLocation $location): void
     {
-        abort_unless($technician->verification_status === VerificationStatus::Approved && $technician->is_active, 404);
+        abort_unless($technician->isPublished(), 404);
 
         $this->technician = $technician->load(['user', 'services']);
 

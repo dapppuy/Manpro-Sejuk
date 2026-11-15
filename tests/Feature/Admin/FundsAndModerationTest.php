@@ -79,19 +79,6 @@ it('hides a review and adjusts the technician rating, then restores it', functio
         ->and($this->technician->rating_avg)->toBe(3.0);
 });
 
-it('promotes a technician for a limited time', function () {
-    $this->actingAs($this->admin);
-
-    Livewire::test('pages::admin.technicians.index')->call('setPromotion', $this->technician->id, 7);
-
-    expect($this->technician->refresh()->isPromotedNow())->toBeTrue()
-        ->and($this->technician->promoted_until->isSameDay(now()->addDays(7)))->toBeTrue();
-
-    Livewire::test('pages::admin.technicians.index')->call('setPromotion', $this->technician->id, 0);
-
-    expect($this->technician->refresh()->isPromotedNow())->toBeFalse();
-});
-
 it('shows conversion KPIs on the admin dashboard', function () {
     SearchLog::create(['results_count' => 3]);
     SearchLog::create(['results_count' => 0]);

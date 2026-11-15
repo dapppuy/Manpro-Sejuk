@@ -38,30 +38,24 @@ it('lists only technicians within the chosen radius', function () {
         ->assertDontSee($far->business_name);
 });
 
-it('puts promoted technicians above closer ones', function () {
-    technicianOffering($this->service, -7.9436, 112.6151, ['business_name' => 'Paling Dekat AC']);
-    technicianOffering($this->service, -7.9600, 112.6150, ['business_name' => 'Promosi AC', 'is_promoted' => true]);
-
-    Livewire::test('pages::search', ['service' => 'cuci', 'sort' => 'terdekat'])
-        ->assertSeeInOrder(['Promosi AC', 'Paling Dekat AC']);
-});
-
-it('ignores an expired promotion', function () {
-    technicianOffering($this->service, -7.9436, 112.6151, ['business_name' => 'Paling Dekat AC']);
-    technicianOffering($this->service, -7.9600, 112.6150, ['business_name' => 'Bekas Promosi AC', 'is_promoted' => true, 'promoted_until' => now()->subDay()]);
-
-    Livewire::test('pages::search', ['service' => 'cuci', 'sort' => 'terdekat'])
-        ->assertSeeInOrder(['Paling Dekat AC', 'Bekas Promosi AC']);
-});
-
-it('filters by minimum badge', function () {
-    technicianOffering($this->service, -7.9440, 112.6160, ['business_name' => 'Baru Daftar AC', 'badge' => TechnicianBadge::Terdaftar]);
-    technicianOffering($this->service, -7.9441, 112.6161, ['business_name' => 'Sertifikat AC', 'badge' => TechnicianBadge::Sertifikat]);
+it('lists only technicians with a verified badge', function () {
+    technicianOffering($this->service, -7.9440, 112.6160, ['business_name' => 'Belum Diperiksa AC', 'badge' => TechnicianBadge::Terdaftar]);
+    technicianOffering($this->service, -7.9441, 112.6161, ['business_name' => 'Identitas AC', 'badge' => TechnicianBadge::Identitas]);
+    technicianOffering($this->service, -7.9442, 112.6162, ['business_name' => 'Sertifikat AC', 'badge' => TechnicianBadge::Sertifikat]);
 
     Livewire::test('pages::search', ['service' => 'cuci'])
-        ->set('badge', 'identitas')
+        ->assertSee(['Identitas AC', 'Sertifikat AC'])
+        ->assertDontSee('Belum Diperiksa AC');
+});
+
+it('filters to certified technicians', function () {
+    technicianOffering($this->service, -7.9441, 112.6161, ['business_name' => 'Identitas AC', 'badge' => TechnicianBadge::Identitas]);
+    technicianOffering($this->service, -7.9442, 112.6162, ['business_name' => 'Sertifikat AC', 'badge' => TechnicianBadge::Sertifikat]);
+
+    Livewire::test('pages::search', ['service' => 'cuci'])
+        ->set('badge', 'sertifikat')
         ->assertSee('Sertifikat AC')
-        ->assertDontSee('Baru Daftar AC');
+        ->assertDontSee('Identitas AC');
 });
 
 it('hides technicians that do not offer the selected service', function () {

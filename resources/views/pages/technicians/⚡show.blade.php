@@ -1,6 +1,5 @@
 <?php
 
-use App\Enums\VerificationStatus;
 use App\Models\Review;
 use App\Models\TechnicianProfile;
 use App\Services\TechnicianSearch;
@@ -21,7 +20,7 @@ new #[Layout('layouts::customer')] class extends Component {
 
     public function mount(TechnicianProfile $technician): void
     {
-        abort_unless($technician->verification_status === VerificationStatus::Approved && $technician->is_active, 404);
+        abort_unless($technician->isPublished(), 404);
 
         $this->technician = $technician->load(['user', 'services', 'prices.service', 'serviceAreas', 'brands', 'photos', 'availabilities']);
     }
@@ -91,7 +90,6 @@ new #[Layout('layouts::customer')] class extends Component {
                 <x-avatar :name="$technician->user->name" :src="$technician->user->avatarUrl()" class="!size-32 rounded-3xl !text-4xl sm:!size-44" />
                 <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-2">
-                        @if ($technician->isPromotedNow()) <x-promo-label /> @endif
                         <x-badge-chip :badge="$technician->badge" size="md" />
                     </div>
                     <h1 class="mt-3 text-3xl font-extrabold tracking-tight sm:text-4xl">{{ $technician->business_name }}</h1>

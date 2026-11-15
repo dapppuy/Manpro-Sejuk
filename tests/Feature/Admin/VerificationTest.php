@@ -47,6 +47,17 @@ it('approves a technician with the chosen badge and publishes the profile', func
         ->and($this->ktp->reviewed_by)->toBe($this->admin->id);
 });
 
+it('cannot approve a technician without a verified badge', function () {
+    $this->actingAs($this->admin);
+
+    Livewire::test('pages::admin.verifications.show', ['technician' => $this->technician])
+        ->set('badge', 'terdaftar')
+        ->call('approve')
+        ->assertHasErrors('badge');
+
+    expect($this->technician->refresh()->verification_status)->toBe(VerificationStatus::Pending);
+});
+
 it('rejects a technician only with a reason', function () {
     $this->actingAs($this->admin);
 
