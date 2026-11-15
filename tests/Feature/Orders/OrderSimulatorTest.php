@@ -22,6 +22,7 @@ beforeEach(function () {
 
 it('walks an order from request to completion in local mode', function () {
     app()['env'] = 'local';
+    config()->set('sejuk.simulation', true);
 
     $page = Livewire::test('pages::orders.show', ['order' => $this->order])->assertSee('Panel simulasi');
 
@@ -53,6 +54,7 @@ it('walks an order from request to completion in local mode', function () {
 
 it('lets the technician decline or time out in local mode', function () {
     app()['env'] = 'local';
+    config()->set('sejuk.simulation', true);
 
     Livewire::test('pages::orders.show', ['order' => $this->order])
         ->call('simulate', 'expireResponse')
@@ -63,6 +65,7 @@ it('lets the technician decline or time out in local mode', function () {
 
 it('ignores steps that do not fit the current status', function () {
     app()['env'] = 'local';
+    config()->set('sejuk.simulation', true);
 
     Livewire::test('pages::orders.show', ['order' => $this->order])->call('simulate', 'payNow');
 
@@ -70,6 +73,8 @@ it('ignores steps that do not fit the current status', function () {
 });
 
 it('hides the panel and refuses simulation outside local', function () {
+    config()->set('sejuk.simulation', true);
+
     Livewire::test('pages::orders.show', ['order' => $this->order])
         ->assertDontSee('Panel simulasi')
         ->call('simulate', 'sendEstimate')
