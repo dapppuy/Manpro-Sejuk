@@ -150,6 +150,10 @@ class TechnicianSeeder extends Seeder
                 ['name' => $name, 'password' => 'password', 'role' => UserRole::Customer, 'city' => 'Malang'],
             );
 
+            if (! $customer->hasVerifiedEmail()) {
+                $customer->markEmailAsVerified();
+            }
+
             $technician->reviews()->forceCreate([
                 'customer_id' => $customer->id,
                 'rating' => $index === 3 && $rating < 4.8 ? 4 : 5,

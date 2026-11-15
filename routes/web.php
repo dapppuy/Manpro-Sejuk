@@ -17,13 +17,13 @@ Route::middleware([RedirectNonCustomers::class])->group(function () {
 
 Route::post('webhooks/midtrans', MidtransWebhookController::class)->name('webhooks.midtrans');
 
-Route::middleware(['auth'])->group(function () {
+Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardRedirectController::class)->name('dashboard');
     Route::get('pesanan/media/{media}', OrderMediaController::class)->name('orders.media');
     Route::get('pesanan/bukti/{proof}/{side}', WorkProofPhotoController::class)->name('orders.proofs.photo');
 });
 
-Route::middleware(['auth', RedirectNonCustomers::class, 'role:customer'])->group(function () {
+Route::middleware(['auth', RedirectNonCustomers::class, 'verified', 'role:customer'])->group(function () {
     Route::livewire('pesan/{technician}', 'pages::requests.create')->name('requests.create');
     Route::livewire('akun', 'pages::account')->name('account');
     Route::livewire('pesanan', 'pages::orders.index')->name('orders.index');
@@ -37,7 +37,7 @@ Route::prefix('mitra')->name('mitra.')->group(function () {
         Route::livewire('daftar', 'pages::mitra.register')->name('register');
     });
 
-    Route::middleware(['auth', 'role:technician'])->group(function () {
+    Route::middleware(['auth', 'verified', 'role:technician'])->group(function () {
         Route::livewire('verifikasi', 'pages::mitra.verification')->name('verification');
 
         Route::middleware(EnsureTechnicianIsApproved::class)->group(function () {
@@ -56,7 +56,7 @@ Route::prefix('mitra')->name('mitra.')->group(function () {
     });
 });
 
-Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->group(function () {
+Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'role:admin'])->group(function () {
     Route::livewire('/', 'pages::admin.dashboard')->name('dashboard');
     Route::livewire('verifikasi', 'pages::admin.verifications.index')->name('verifications.index');
     Route::livewire('verifikasi/{technician:id}', 'pages::admin.verifications.show')->name('verifications.show');

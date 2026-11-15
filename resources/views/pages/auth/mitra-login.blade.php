@@ -24,9 +24,12 @@
                 @csrf
                 <x-form.input label="Email atau nomor HP" name="email" :value="old('email')" autocomplete="username" autofocus />
                 <x-form.input label="Kata sandi" name="password" type="password" autocomplete="current-password" />
-                <label class="flex items-center gap-2 text-sm text-ink-soft">
-                    <input type="checkbox" name="remember" class="size-4 accent-ice" @checked(old('remember')) /> Ingat saya
-                </label>
+                <div class="flex items-center justify-between gap-3">
+                    <label class="flex items-center gap-2 text-sm text-ink-soft">
+                        <input type="checkbox" name="remember" class="size-4 accent-ice" @checked(old('remember')) /> Ingat saya
+                    </label>
+                    <a href="{{ route('password.request') }}" class="text-sm font-semibold text-ice hover:text-ice-deep">Lupa kata sandi?</a>
+                </div>
                 <x-button type="submit" size="lg" class="w-full" icon-trailing="arrow-right">Masuk</x-button>
                 <div class="border-t border-line pt-5 text-center">
                     <p class="text-sm text-mute">Belum punya akun teknisi?</p>

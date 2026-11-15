@@ -103,12 +103,21 @@ new #[Layout('layouts::customer'), Title('Profil saya')] class extends Component
             $user->phone_verified_at = null;
         }
 
-        if ($user->isDirty('email')) {
+        $emailChanged = $user->isDirty('email');
+
+        if ($emailChanged) {
             $user->email_verified_at = null;
         }
 
         $user->save();
         $this->editing = false;
+
+        if ($emailChanged) {
+            $user->sendEmailVerificationNotification();
+            $this->redirectRoute('verification.notice');
+
+            return;
+        }
 
         Flux::toast(variant: 'success', text: 'Profil disimpan.');
     }

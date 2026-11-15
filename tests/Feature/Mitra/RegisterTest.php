@@ -6,8 +6,10 @@ use App\Enums\UserRole;
 use App\Enums\VerificationStatus;
 use App\Models\Service;
 use App\Models\User;
+use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
@@ -38,6 +40,8 @@ function filledRegistration(Service $service): Testable
 }
 
 it('registers a technician with a certificate and waits for verification', function () {
+    Notification::fake();
+
     filledRegistration($this->service)
         ->set('certificate', UploadedFile::fake()->create('sertifikat.pdf', 200, 'application/pdf'))
         ->call('register')
@@ -58,6 +62,7 @@ it('registers a technician with a certificate and waits for verification', funct
 
     $profile->documents->each(fn ($document) => Storage::disk('local')->assertExists($document->path));
     $this->assertAuthenticatedAs($user);
+    Notification::assertSentTo($user, VerifyEmail::class);
 });
 
 it('registers a technician with work experience instead of a certificate', function () {

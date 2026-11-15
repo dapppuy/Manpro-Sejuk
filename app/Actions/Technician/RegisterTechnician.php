@@ -11,6 +11,7 @@ use App\Models\TechnicianDocument;
 use App\Models\TechnicianProfile;
 use App\Models\User;
 use App\Services\Geocoder;
+use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -30,7 +31,7 @@ class RegisterTechnician
     {
         $coordinates = $this->geocoder->search($account['area']);
 
-        return DB::transaction(function () use ($account, $ktp, $certificate, $experience, $coordinates) {
+        $user = DB::transaction(function () use ($account, $ktp, $certificate, $experience, $coordinates) {
             $user = User::create([
                 'name' => $account['name'],
                 'email' => $account['email'],
@@ -68,6 +69,10 @@ class RegisterTechnician
 
             return $user;
         });
+
+        event(new Registered($user));
+
+        return $user;
     }
 
     private function storeDocument(TechnicianProfile $technician, DocumentType $type, UploadedFile $file): void
