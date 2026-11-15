@@ -28,11 +28,11 @@ class OrderSimulator
     }
 
     /**
-     * Actions that make sense for the order's current status: key => button label.
+     * All actions that make sense for the order's current status: key => button label.
      *
      * @return array<string, string>
      */
-    public function actionsFor(Order $order): array
+    public function allActionsFor(Order $order): array
     {
         return match ($order->status) {
             OrderStatus::MenungguRespons => [
@@ -59,9 +59,26 @@ class OrderSimulator
         };
     }
 
+    /**
+     * Actions displayed in the UI. When simulation_payment_only is active,
+     * only payment gateway simulation actions are shown (technician acts via portal).
+     *
+     * @return array<string, string>
+     */
+    public function actionsFor(Order $order): array
+    {
+        $all = $this->allActionsFor($order);
+
+        if (config('sejuk.simulation_payment_only', false)) {
+            return $order->status === OrderStatus::MenungguPembayaran ? $all : [];
+        }
+
+        return $all;
+    }
+
     public function run(Order $order, string $action): void
     {
-        if (! array_key_exists($action, $this->actionsFor($order))) {
+        if (! array_key_exists($action, $this->allActionsFor($order))) {
             throw new InvalidOrderTransition('Langkah simulasi ini tidak cocok dengan status pesanan sekarang.');
         }
 

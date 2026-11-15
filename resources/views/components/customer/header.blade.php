@@ -10,35 +10,37 @@
 
 <header x-data="{ open: false }" class="sticky top-0 z-30 border-b border-line bg-paper/85 backdrop-blur-md">
     <div class="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4 sm:px-6 md:gap-8">
-        <a href="{{ route('home') }}" wire:navigate aria-label="Sejuk, ke beranda">
+        <a href="{{ $user ? $user->homeRoute() : route('home') }}" wire:navigate aria-label="Sejuk, ke beranda">
             <x-logo />
         </a>
 
-        <nav class="hidden items-center gap-1 text-sm font-semibold text-ink-soft md:flex" aria-label="Menu utama">
-            @foreach ($navItems as $item)
-                <a href="{{ $item['href'] }}" wire:navigate @class([
-                    'inline-flex items-center rounded-full px-3.5 py-2 transition',
-                    'bg-white text-ink ring-1 ring-line' => $item['active'],
-                    'hover:text-ink' => ! $item['active'],
-                ])>
-                    {{ $item['label'] }}
-                    @if ($item['dot'] ?? false)
-                        <span class="ml-1.5 inline-block size-2 rounded-full bg-coral" aria-label="Ada pesanan aktif"></span>
-                    @endif
-                </a>
-            @endforeach
-        </nav>
+        @if ($user === null || $user->isCustomer())
+            <nav class="hidden items-center gap-1 text-sm font-semibold text-ink-soft md:flex" aria-label="Menu utama">
+                @foreach ($navItems as $item)
+                    <a href="{{ $item['href'] }}" wire:navigate @class([
+                        'inline-flex items-center rounded-full px-3.5 py-2 transition',
+                        'bg-white text-ink ring-1 ring-line' => $item['active'],
+                        'hover:text-ink' => ! $item['active'],
+                    ])>
+                        {{ $item['label'] }}
+                        @if ($item['dot'] ?? false)
+                            <span class="ml-1.5 inline-block size-2 rounded-full bg-coral" aria-label="Ada pesanan aktif"></span>
+                        @endif
+                    </a>
+                @endforeach
+            </nav>
+        @endif
 
         <div class="ml-auto flex items-center gap-2 sm:gap-3">
-            @if ($locationLabel)
+            @if ($locationLabel && ($user === null || $user->isCustomer()))
                 <a href="{{ route('home') }}#lokasi" wire:navigate class="hidden max-w-60 items-center gap-1.5 truncate rounded-full bg-white px-3 py-1.5 text-xs font-medium text-ink-soft ring-1 ring-line lg:inline-flex">
                     <flux:icon.map-pin class="size-3.5 shrink-0" />
                     <span class="truncate">{{ $locationLabel }}</span>
                 </a>
             @endif
 
-            @if (config('sejuk.show_technician_entry'))
-                <a href="{{ $user?->isTechnician() ? route('mitra.dashboard') : route('mitra.login') }}" class="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-sm font-semibold ring-1 ring-line hover:ring-ink/30 sm:px-3.5" aria-label="Buka portal teknisi">
+            @if (config('sejuk.show_technician_entry') && ($user === null || $user->isCustomer()))
+                <a href="{{ route('mitra.login') }}" class="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-sm font-semibold ring-1 ring-line hover:ring-ink/30 sm:px-3.5" aria-label="Buka portal teknisi">
                     <flux:icon.wrench class="size-4" />
                     <span class="hidden sm:inline">Untuk Teknisi</span>
                 </a>
@@ -84,20 +86,26 @@
 
     <div x-show="open" x-cloak x-transition.opacity @click.outside="open = false" class="border-t border-line bg-paper md:hidden">
         <nav class="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-3" aria-label="Menu utama seluler">
-            @if ($locationLabel)
-                <a href="{{ route('home') }}#lokasi" wire:navigate class="mb-1 flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-medium text-ink-soft ring-1 ring-line">
-                    <flux:icon.map-pin class="size-4 shrink-0" />
-                    <span class="truncate">{{ $locationLabel }}</span>
+            @if ($user === null || $user->isCustomer())
+                @if ($locationLabel)
+                    <a href="{{ route('home') }}#lokasi" wire:navigate class="mb-1 flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-medium text-ink-soft ring-1 ring-line">
+                        <flux:icon.map-pin class="size-4 shrink-0" />
+                        <span class="truncate">{{ $locationLabel }}</span>
+                    </a>
+                @endif
+                @foreach ($navItems as $item)
+                    <a href="{{ $item['href'] }}" wire:navigate class="flex items-center justify-between rounded-xl px-4 py-3 text-base font-semibold text-ink hover:bg-white">
+                        {{ $item['label'] }}
+                        @if ($item['dot'] ?? false)
+                            <span class="size-2 rounded-full bg-coral"></span>
+                        @endif
+                    </a>
+                @endforeach
+            @else
+                <a href="{{ $user->homeRoute() }}" class="flex items-center gap-2 rounded-xl px-4 py-3 text-base font-semibold text-ink hover:bg-white">
+                    <flux:icon.layout-dashboard class="size-4" /> Buka portal saya
                 </a>
             @endif
-            @foreach ($navItems as $item)
-                <a href="{{ $item['href'] }}" wire:navigate class="flex items-center justify-between rounded-xl px-4 py-3 text-base font-semibold text-ink hover:bg-white">
-                    {{ $item['label'] }}
-                    @if ($item['dot'] ?? false)
-                        <span class="size-2 rounded-full bg-coral"></span>
-                    @endif
-                </a>
-            @endforeach
         </nav>
     </div>
 </header>

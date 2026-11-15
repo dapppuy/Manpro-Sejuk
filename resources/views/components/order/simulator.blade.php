@@ -3,8 +3,9 @@
 ])
 
 {{-- Local development only: plays the technician and payment gateway. Never rendered outside APP_ENV=local. --}}
-<div {{ $attributes->class('rounded-2xl border-2 border-dashed border-ink/15 bg-paper/70 p-4') }}>
-    <div class="mb-3 flex items-center gap-2 text-[11px] font-bold tracking-wider text-ink-soft uppercase">
+<div {{ $attributes->class('p-2') }}>
+{{-- <div> --}}
+    {{-- <div class="mb-3 flex items-center gap-2 text-[11px] font-bold tracking-wider text-ink-soft uppercase">
         <flux:icon.wrench class="size-3.5" />
         Panel simulasi · hanya di lokal
     </div>
@@ -19,5 +20,5 @@
                 </x-button>
             @endforeach
         </div>
-    @endif
+    @endif --}}
 </div>

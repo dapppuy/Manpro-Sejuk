@@ -21,7 +21,8 @@ new #[Layout('layouts::admin'), Title('Detail verifikasi')] class extends Compon
     public function mount(TechnicianProfile $technician): void
     {
         $this->technician = $technician->load(['user', 'services', 'serviceAreas', 'documents', 'experience']);
-        $this->badge = $technician->documents->contains('type', DocumentType::Sertifikat) ? 'sertifikat' : 'identitas';
+        $hasCert = $this->technician->documents->contains(fn ($d) => ($d->type instanceof DocumentType ? $d->type->value : (string) $d->type) === 'sertifikat');
+        $this->badge = $hasCert ? 'sertifikat' : 'identitas';
     }
 
     public function approve(ReviewTechnicianVerification $review): void
@@ -47,8 +48,25 @@ new #[Layout('layouts::admin'), Title('Detail verifikasi')] class extends Compon
 
 @php
     $technician = $this->technician;
-    $ktp = $technician->documents->firstWhere('type', DocumentType::Ktp);
-    $certificate = $technician->documents->firstWhere('type', DocumentType::Sertifikat);
+    $ktp = $technician->documents->first(fn ($d) => ($d->type instanceof DocumentType ? $d->type->value : (string) $d->type) === 'ktp');
+    $certificate = $technician->documents->first(fn ($d) => ($d->type instanceof DocumentType ? $d->type->value : (string) $d->type) === 'sertifikat');
+
+    // Format nomor WhatsApp untuk Video Call
+    $rawPhone = $technician->user->phone ?? '';
+    $cleanPhone = preg_replace('/\D+/', '', $rawPhone);
+    if (str_starts_with($cleanPhone, '0')) {
+        $cleanPhone = '62' . substr($cleanPhone, 1);
+    }
+    $waMessage = urlencode("Halo {$technician->user->name}, saya Admin Sejuk ingin melakukan video call singkat untuk verifikasi alat kerja dan akun mitra Anda.");
+    $waUrl = $cleanPhone ? "https://wa.me/{$cleanPhone}?text={$waMessage}" : null;
+
+    $rawRefPhone = $technician->experience?->reference_phone ?? '';
+    $cleanRefPhone = preg_replace('/\D+/', '', $rawRefPhone);
+    if (str_starts_with($cleanRefPhone, '0')) {
+        $cleanRefPhone = '62' . substr($cleanRefPhone, 1);
+    }
+    $waRefMessage = urlencode("Halo, kami dari tim verifikasi Sejuk. Apakah benar Bapak/Ibu pernah menggunakan jasa servis AC dari teknisi {$technician->user->name}?");
+    $waRefUrl = $cleanRefPhone ? "https://wa.me/{$cleanRefPhone}?text={$waRefMessage}" : null;
 @endphp
 
 <div>
@@ -99,8 +117,25 @@ new #[Layout('layouts::admin'), Title('Detail verifikasi')] class extends Compon
             </x-card>
 
             <x-card class="p-5 sm:p-6">
-                <x-section-title icon="award" title="Bukti kompetensi" :description="$certificate ? 'Sertifikat kompetensi' : 'Pengalaman kerja tanpa sertifikat'" />
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <x-section-title icon="award" title="Bukti kompetensi" :description="$certificate ? 'Jalur Sertifikat Resmi' : 'Jalur Pengalaman Kerja'" />
+                    @if ($certificate)
+                        <span class="inline-flex items-center gap-1.5 rounded-full bg-leaf-soft px-3 py-1 text-xs font-semibold text-leaf">
+                            <flux:icon.check-circle class="size-3.5" /> Jalur Cepat (Fast-Track)
+                        </span>
+                    @else
+                        <span class="inline-flex items-center gap-1.5 rounded-full bg-sun-soft px-3 py-1 text-xs font-semibold text-sun-ink">
+                            <flux:icon.video-camera class="size-3.5" /> Wajib Video Call
+                        </span>
+                    @endif
+                </div>
+
                 @if ($certificate)
+                    <div class="mt-4 rounded-xl bg-frost p-4 text-xs leading-relaxed text-ink-soft">
+                        <p class="font-bold text-ink">Panduan Verifikasi Jalur Cepat (Fast-Track):</p>
+                        <p class="mt-1">Calon mitra melampirkan sertifikat kompetensi resmi. Cocokkan nama sertifikat dengan KTP dan pastikan nomor registrasi/lembaga penerbit resmi (BNSP/BLK/Brand). Tidak memerlukan video call jika dokumen valid.</p>
+                    </div>
+
                     @if ($certificate->isPdf())
                         <x-button variant="secondary" class="mt-5" icon="file-text" :href="route('admin.documents.show', $certificate)" target="_blank">Buka sertifikat (PDF)</x-button>
                     @else
@@ -109,9 +144,41 @@ new #[Layout('layouts::admin'), Title('Detail verifikasi')] class extends Compon
                         </a>
                     @endif
                 @elseif ($technician->experience)
+                    <div class="mt-4 rounded-2xl bg-sun-soft/40 p-4 text-xs text-ink-soft ring-1 ring-sun-ink/20">
+                        <div class="flex items-center gap-2 font-bold text-sun-ink">
+                            <flux:icon.video-camera class="size-4" /> SOP Verifikasi Video Call WhatsApp (2–3 Menit):
+                        </div>
+                        <ol class="mt-2 list-inside list-decimal space-y-1">
+                            <li>Cocokkan wajah calon teknisi secara langsung dengan <strong>Foto KTP</strong> di atas.</li>
+                            <li>Minta teknisi mengarahkan kamera ke <strong>alat kerja fisik</strong> (manifold, pompa jet cleaner, dsb.).</li>
+                            <li>Ajukan 1 pertanyaan praktis seputar servis AC lapangan.</li>
+                        </ol>
+
+                        <div class="mt-4 flex flex-wrap gap-2">
+                            @if ($waUrl)
+                                <a href="{{ $waUrl }}" target="_blank" class="inline-flex items-center gap-2 rounded-xl bg-leaf px-4 py-2 text-xs font-bold text-white shadow-sm hover:opacity-95">
+                                    <flux:icon.video-camera class="size-4" /> Hubungi Video Call WhatsApp
+                                </a>
+                            @endif
+                            @if ($waRefUrl)
+                                <a href="{{ $waRefUrl }}" target="_blank" class="inline-flex items-center gap-2 rounded-xl bg-white px-3.5 py-2 text-xs font-semibold text-ink-soft ring-1 ring-line hover:bg-paper">
+                                    <flux:icon.phone class="size-3.5" /> Hubungi Nomor Referensi
+                                </a>
+                            @endif
+                        </div>
+                    </div>
+
                     <dl class="mt-5 grid gap-4 sm:grid-cols-2">
                         <div><dt class="text-xs text-mute">Lama pengalaman</dt><dd class="mt-1 font-semibold">{{ $technician->experience->years }} tahun</dd></div>
-                        <div><dt class="text-xs text-mute">Nomor referensi</dt><dd class="mt-1 font-semibold">{{ $technician->experience->reference_phone }}</dd></div>
+                        <div>
+                            <dt class="text-xs text-mute">Nomor referensi</dt>
+                            <dd class="mt-1 flex items-center gap-2 font-semibold">
+                                {{ $technician->experience->reference_phone }}
+                                @if ($waRefUrl)
+                                    <a href="{{ $waRefUrl }}" target="_blank" class="text-xs font-normal text-ice hover:underline">Chat WA</a>
+                                @endif
+                            </dd>
+                        </div>
                         <div class="sm:col-span-2"><dt class="text-xs text-mute">Cerita pengalaman</dt><dd class="mt-1 text-sm leading-relaxed whitespace-pre-line text-ink-soft">{{ $technician->experience->description }}</dd></div>
                     </dl>
                 @endif
@@ -128,6 +195,15 @@ new #[Layout('layouts::admin'), Title('Detail verifikasi')] class extends Compon
 
             <x-card class="p-5">
                 <p class="font-bold">Setujui dengan badge</p>
+                @if ($certificate)
+                    <div class="mt-2 rounded-xl bg-leaf-soft p-2.5 text-xs text-leaf">
+                        ✅ <strong>Jalur Sertifikat:</strong> Disarankan pilih <strong>Bersertifikat</strong> jika dokumen valid.
+                    </div>
+                @else
+                    <div class="mt-2 rounded-xl bg-frost p-2.5 text-xs text-ink-soft">
+                        💡 <strong>Jalur Pengalaman:</strong> Disarankan pilih <strong>Identitas Terverifikasi</strong> setelah lolos video call.
+                    </div>
+                @endif
                 <div class="mt-4 space-y-2">
                     @foreach (TechnicianBadge::cases() as $case)
                         <label wire:key="badge-{{ $case->value }}" class="flex cursor-pointer items-start gap-3 rounded-xl p-3 ring-1 ring-line has-checked:bg-frost has-checked:ring-ice">

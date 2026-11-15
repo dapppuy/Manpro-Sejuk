@@ -73,6 +73,8 @@ it('hides technicians that do not offer the selected service', function () {
 });
 
 it('shows only technicians available today when asked', function () {
+    $this->travelTo(today()->setHour(9));
+
     technicianOffering($this->service, -7.9440, 112.6160, ['business_name' => 'Siap AC']);
     technicianOffering($this->service, -7.9441, 112.6161, ['business_name' => 'Libur AC', 'is_accepting_orders' => false]);
 
@@ -80,7 +82,7 @@ it('shows only technicians available today when asked', function () {
         ->set('availableToday', true)
         ->assertSee('Siap AC')
         ->assertDontSee('Libur AC');
-})->freezeTime();
+});
 
 it('does not list technicians awaiting verification', function () {
     $pending = technicianOffering($this->service, -7.9440, 112.6160, ['business_name' => 'Belum Diverifikasi AC']);
