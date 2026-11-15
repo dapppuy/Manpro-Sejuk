@@ -7,6 +7,7 @@ use App\Http\Controllers\OrderMediaController;
 use App\Http\Controllers\WorkProofPhotoController;
 use App\Http\Middleware\EnsureTechnicianIsApproved;
 use App\Http\Middleware\RedirectNonCustomers;
+use App\Livewire\Customer\SmartAcCheck;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware([RedirectNonCustomers::class])->group(function () {
@@ -21,6 +22,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardRedirectController::class)->name('dashboard');
     Route::get('pesanan/media/{media}', OrderMediaController::class)->name('orders.media');
     Route::get('pesanan/bukti/{proof}/{side}', WorkProofPhotoController::class)->name('orders.proofs.photo');
+    Route::get('/cek-ac-pintar', SmartAcCheck::class)->name('customer.smart-check');
 });
 
 Route::middleware(['auth', RedirectNonCustomers::class, 'verified', 'role:customer'])->group(function () {

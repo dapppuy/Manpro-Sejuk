@@ -5,6 +5,7 @@
         ['label' => 'Cari teknisi', 'href' => route('search'), 'active' => request()->routeIs('search', 'technicians.*')],
         ['label' => 'Pesanan saya', 'href' => $ordersUrl, 'active' => request()->routeIs('orders.*'), 'dot' => $hasActiveOrder],
         ['label' => 'Cara kerja', 'href' => route('home').'#cara-kerja', 'active' => false],
+        ['label' => 'Cek AC Pintar', 'href' => route('customer.smart-check'), 'active' => request()->routeIs('customer.smart-check'), 'badge' => 'AI'],
     ];
 @endphp
 
