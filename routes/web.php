@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\TechnicianDocumentController;
 use App\Http\Controllers\DashboardRedirectController;
 use App\Http\Controllers\MidtransWebhookController;
 use App\Http\Controllers\OrderMediaController;
+use App\Http\Controllers\RunScheduleController;
 use App\Http\Controllers\UnitPhotoController;
 use App\Http\Controllers\WorkProofPhotoController;
 use App\Http\Middleware\EnsureTechnicianIsApproved;
@@ -20,6 +21,7 @@ Route::middleware([RedirectNonCustomers::class])->group(function () {
 Route::post('webhooks/midtrans', MidtransWebhookController::class)->name('webhooks.midtrans');
 
 Route::livewire('u/{qrToken}', 'pages::units.qr')->name('unit.qr.show');
+Route::get('cron/{token}', RunScheduleController::class)->middleware('throttle:10,1')->name('cron.run');
 
 Route::livewire('syarat-ketentuan', 'pages::content-page')->defaults('slug', 'syarat-ketentuan')->name('pages.terms');
 Route::livewire('kebijakan-privasi', 'pages::content-page')->defaults('slug', 'kebijakan-privasi')->name('pages.privacy');

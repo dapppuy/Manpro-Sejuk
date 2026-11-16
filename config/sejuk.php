@@ -93,6 +93,9 @@ return [
     // New technicians are watched closely for their first orders (selection stage 7: masa percobaan).
     'probation_orders' => 5,
 
+    // Secret for /cron/{token}, called every minute by an external cron service on hosts without cron (Vercel). Empty disables it.
+    'cron_token' => env('SEJUK_CRON_TOKEN', ''),
+
     /*
     |--------------------------------------------------------------------------
     | Reference Data
