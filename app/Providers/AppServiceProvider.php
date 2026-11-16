@@ -2,13 +2,17 @@
 
 namespace App\Providers;
 
+use App\Filesystem\DatabaseFilesystemAdapter;
 use App\Support\CustomerLocation;
 use Carbon\CarbonImmutable;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use League\Flysystem\Filesystem;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -27,6 +31,23 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureDefaults();
         $this->configureViews();
+        $this->configureDatabaseDisks();
+    }
+
+    /**
+     * The "database" filesystem driver keeps files in the shared database, for hosts
+     * whose local disk is not shared between requests (Vercel).
+     */
+    protected function configureDatabaseDisks(): void
+    {
+        Storage::extend('database', function ($app, array $config): FilesystemAdapter {
+            $adapter = new DatabaseFilesystemAdapter(
+                DB::connection($config['connection'] ?? null),
+                (string) ($config['namespace'] ?? 'default'),
+            );
+
+            return new FilesystemAdapter(new Filesystem($adapter, $config), $adapter, $config);
+        });
     }
 
     /**

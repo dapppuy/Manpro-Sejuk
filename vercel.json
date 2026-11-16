@@ -3,6 +3,7 @@
     "framework": null,
     "buildCommand": "echo \"Assets are prebuilt in public/build\"",
     "outputDirectory": "public",
+    "regions": ["sin1"],
     "functions": {
         "api/index.php": {
             "runtime": "vercel-php@0.9.0",
@@ -26,6 +27,8 @@
         "LOG_CHANNEL": "stderr",
         "SESSION_DRIVER": "database",
         "CACHE_STORE": "database",
-        "QUEUE_CONNECTION": "sync"
+        "QUEUE_CONNECTION": "sync",
+        "FILESYSTEM_LOCAL_DRIVER": "database",
+        "FILESYSTEM_PUBLIC_DRIVER": "database"
     }
 }

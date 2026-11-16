@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\TechnicianDocumentController;
 use App\Http\Controllers\DashboardRedirectController;
 use App\Http\Controllers\MidtransWebhookController;
 use App\Http\Controllers\OrderMediaController;
+use App\Http\Controllers\PublicStorageController;
 use App\Http\Controllers\RunScheduleController;
 use App\Http\Controllers\UnitPhotoController;
 use App\Http\Controllers\WorkProofPhotoController;
@@ -22,6 +23,10 @@ Route::post('webhooks/midtrans', MidtransWebhookController::class)->name('webhoo
 
 Route::livewire('u/{qrToken}', 'pages::units.qr')->name('unit.qr.show');
 Route::get('cron/{token}', RunScheduleController::class)->middleware('throttle:10,1')->name('cron.run');
+
+if (config('filesystems.disks.public.driver') === 'database') {
+    Route::get('storage/{path}', PublicStorageController::class)->where('path', '.*')->name('storage.public');
+}
 
 Route::livewire('syarat-ketentuan', 'pages::content-page')->defaults('slug', 'syarat-ketentuan')->name('pages.terms');
 Route::livewire('kebijakan-privasi', 'pages::content-page')->defaults('slug', 'kebijakan-privasi')->name('pages.privacy');

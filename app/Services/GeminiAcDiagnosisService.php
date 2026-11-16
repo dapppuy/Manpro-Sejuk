@@ -271,9 +271,8 @@ class GeminiAcDiagnosisService
     private function encodeImagePart(string $storagePath): array
     {
         $disk = Storage::disk(Diagnosis::PHOTO_DISK);
-        $fullPath = $disk->path($storagePath);
         $bytes = $disk->get($storagePath);
-        $mimeType = @mime_content_type($fullPath) ?: 'image/jpeg';
+        $mimeType = $disk->mimeType($storagePath) ?: 'image/jpeg';
 
         if (function_exists('imagecreatefromstring')) {
             $image = @imagecreatefromstring($bytes);
