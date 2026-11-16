@@ -25,6 +25,11 @@ $app = Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: [
             'webhooks/*',
         ]);
+
+        // Vercel terminates HTTPS at its edge proxy; trust its forwarded headers so URLs are generated as https.
+        if (getenv('VERCEL')) {
+            $middleware->trustProxies(at: '*');
+        }
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
