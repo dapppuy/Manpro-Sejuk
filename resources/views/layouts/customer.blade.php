@@ -20,6 +20,9 @@
                     @if (Route::has('mitra.register'))
                         <a href="{{ route('mitra.register') }}" class="hover:text-ink">Daftar jadi mitra</a>
                     @endif
+                    <a href="{{ route('pages.help') }}" wire:navigate class="hover:text-ink">Bantuan</a>
+                    <a href="{{ route('pages.terms') }}" wire:navigate class="hover:text-ink">Syarat & Ketentuan</a>
+                    <a href="{{ route('pages.privacy') }}" wire:navigate class="hover:text-ink">Kebijakan Privasi</a>
                     <span>Teknisi AC terdekat di {{ config('sejuk.city') }}</span>
                 </nav>
             </div>

@@ -9,6 +9,7 @@ use App\Enums\OrderStatus;
 use App\Enums\TimeWindow;
 use App\Events\OrderStatusChanged;
 use App\Exceptions\InvalidOrderTransition;
+use App\Models\AuditLog;
 use App\Models\Order;
 use App\Models\TechnicianProfile;
 use App\Models\UnitServiceLog;
@@ -173,6 +174,30 @@ class OrderWorkflow
     }
 
     /**
+     * The technician leaves for the customer's address. The customer is told roughly when to expect them.
+     */
+    public function startTrip(Order $order, TechnicianProfile $technician, ?int $etaMinutes): void
+    {
+        $this->ensureStatus($order, [OrderStatus::Terjadwal]);
+        $this->ensureAssigned($order, $technician);
+
+        $order->fill(['trip_started_at' => now(), 'trip_eta_minutes' => $etaMinutes]);
+        $this->transition($order, OrderStatus::DalamPerjalanan, $technician->user);
+    }
+
+    /**
+     * The technician has arrived and starts inspecting the AC before sending the final cost.
+     */
+    public function markArrived(Order $order, TechnicianProfile $technician): void
+    {
+        $this->ensureStatus($order, [OrderStatus::Terjadwal, OrderStatus::DalamPerjalanan]);
+        $this->ensureAssigned($order, $technician);
+
+        $order->fill(['arrived_at' => now()]);
+        $this->transition($order, OrderStatus::Pemeriksaan, $technician->user);
+    }
+
+    /**
      * L-07 (technician side): after inspecting the AC the technician sends the final cost lines.
      * The warranty fee the customer chose is added automatically. Sending again while the
      * customer has not decided replaces the previous lines.
@@ -181,7 +206,7 @@ class OrderWorkflow
      */
     public function submitFinalCost(Order $order, TechnicianProfile $technician, array $items): void
     {
-        $this->ensureStatus($order, [OrderStatus::Terjadwal, OrderStatus::MenungguPersetujuanBiaya]);
+        $this->ensureStatus($order, [OrderStatus::Terjadwal, OrderStatus::DalamPerjalanan, OrderStatus::Pemeriksaan, OrderStatus::MenungguPersetujuanBiaya]);
         $this->ensureAssigned($order, $technician);
 
         if ($items === []) {
@@ -325,6 +350,7 @@ class OrderWorkflow
             ]);
 
             $this->transition($order, OrderStatus::Dibatalkan, $admin, $reason);
+            AuditLog::record('order.cancelled', "Pesanan #{$order->code} dibatalkan admin: {$reason}", $order, actor: $admin);
         });
     }
 
@@ -336,7 +362,10 @@ class OrderWorkflow
         $this->ensureStatus($order, [OrderStatus::Sengketa]);
 
         if ($forwardToTechnician) {
-            DB::transaction(fn () => $this->complete($order, $admin, 'Sengketa diselesaikan admin: '.$note));
+            DB::transaction(function () use ($order, $admin, $note) {
+                $this->complete($order, $admin, 'Sengketa diselesaikan admin: '.$note);
+                AuditLog::record('order.dispute_resolved', "Sengketa #{$order->code} diselesaikan, dana diteruskan ke teknisi: {$note}", $order, actor: $admin);
+            });
 
             return;
         }

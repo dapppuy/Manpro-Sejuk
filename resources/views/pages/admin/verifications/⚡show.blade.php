@@ -4,7 +4,11 @@ use App\Actions\Technician\ReviewTechnicianVerification;
 use App\Enums\DocumentType;
 use App\Enums\TechnicianBadge;
 use App\Enums\VerificationStatus;
+use App\Models\AuditLog;
 use App\Models\TechnicianProfile;
+use App\Notifications\TechnicianSelectionUpdated;
+use App\Support\TechnicianSelection;
+use Carbon\CarbonImmutable;
 use Flux\Flux;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
@@ -18,6 +22,13 @@ new #[Layout('layouts::admin'), Title('Detail verifikasi')] class extends Compon
 
     public string $reason = '';
 
+    /**
+     * Admin notes per selection stage, e.g. the interview score.
+     *
+     * @var array<string, string>
+     */
+    public array $stageNotes = [];
+
     public function mount(TechnicianProfile $technician): void
     {
         $this->technician = $technician->load(['user', 'services', 'serviceAreas', 'documents', 'experience']);
@@ -25,9 +36,51 @@ new #[Layout('layouts::admin'), Title('Detail verifikasi')] class extends Compon
         $this->badge = $hasCert ? 'sertifikat' : 'identitas';
     }
 
+    public function passStage(string $stage): void
+    {
+        $selection = TechnicianSelection::for($this->technician);
+        abort_unless(array_key_exists($stage, $selection->stages()), 404);
+
+        $this->validate(["stageNotes.{$stage}" => ['nullable', 'string', 'max:500']], attributes: ["stageNotes.{$stage}" => 'catatan']);
+
+        $selection->markPassed($stage, auth()->user(), ($this->stageNotes[$stage] ?? '') ?: null);
+        AuditLog::record('technician.stage_passed', "{$this->technician->business_name} lolos tahap ".TechnicianSelection::STAGES[$stage]['title'], $this->technician, ['note' => $this->stageNotes[$stage] ?? null]);
+        $this->technician->user->notify(new TechnicianSelectionUpdated($this->technician, $stage));
+
+        Flux::toast(variant: 'success', text: 'Tahap '.TechnicianSelection::STAGES[$stage]['title'].' ditandai lolos.');
+    }
+
+    public function skipStage(string $stage): void
+    {
+        $selection = TechnicianSelection::for($this->technician);
+        abort_unless($selection->canSkip($stage), 422);
+
+        $this->validate(["stageNotes.{$stage}" => ['nullable', 'string', 'max:500']], attributes: ["stageNotes.{$stage}" => 'catatan']);
+
+        $selection->skip($stage, auth()->user(), ($this->stageNotes[$stage] ?? '') ?: null);
+        AuditLog::record('technician.stage_skipped', "Tahap ".TechnicianSelection::STAGES[$stage]['title']." untuk {$this->technician->business_name} dilewati (jalur sertifikat)", $this->technician);
+        $this->technician->user->notify(new TechnicianSelectionUpdated($this->technician, $stage));
+
+        Flux::toast(text: 'Tahap '.TechnicianSelection::STAGES[$stage]['title'].' dilewati.');
+    }
+
+    public function undoStage(string $stage): void
+    {
+        abort_unless(array_key_exists($stage, TechnicianSelection::STAGES), 404);
+
+        TechnicianSelection::for($this->technician)->undo($stage);
+        AuditLog::record('technician.stage_undone', "Tanda lolos tahap ".TechnicianSelection::STAGES[$stage]['title']." untuk {$this->technician->business_name} dibatalkan", $this->technician);
+    }
+
     public function approve(ReviewTechnicianVerification $review): void
     {
         $this->validate(['badge' => ['required', Rule::enum(TechnicianBadge::class)->only(TechnicianBadge::verified())]]);
+
+        if (! TechnicianSelection::for($this->technician)->isReadyToApprove()) {
+            $this->addError('badge', 'Selesaikan semua tahap seleksi dan tunggu teknisi menyetujui perjanjian kemitraan.');
+
+            return;
+        }
 
         $review->approve($this->technician, TechnicianBadge::from($this->badge), auth()->user());
 
@@ -48,6 +101,8 @@ new #[Layout('layouts::admin'), Title('Detail verifikasi')] class extends Compon
 
 @php
     $technician = $this->technician;
+    $selection = TechnicianSelection::for($technician);
+    $currentStage = $selection->currentStage();
     $ktp = $technician->documents->first(fn ($d) => ($d->type instanceof DocumentType ? $d->type->value : (string) $d->type) === 'ktp');
     $certificate = $technician->documents->first(fn ($d) => ($d->type instanceof DocumentType ? $d->type->value : (string) $d->type) === 'sertifikat');
 
@@ -86,6 +141,63 @@ new #[Layout('layouts::admin'), Title('Detail verifikasi')] class extends Compon
 
     <div class="mt-7 grid gap-6 lg:grid-cols-[1fr_320px]">
         <div class="space-y-6">
+            <x-card class="p-5 sm:p-6">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <x-section-title icon="list-checks" title="Tahapan seleksi" :description="($selection->usesCertificate() ? 'Jalur sertifikat: wawancara, uji praktik, dan cek referensi boleh dijalankan atau dilewati sesuai penilaianmu. ' : '').'Tahap 2 dst. dilakukan lewat WhatsApp, lalu catat hasilnya di sini.'" />
+                    <x-pill :tone="$selection->isReadyToApprove() ? 'leaf' : 'sun'">{{ $selection->passedCount() }}/{{ count($selection->stages()) }} tahap</x-pill>
+                </div>
+                <ol class="mt-5 space-y-3">
+                    @foreach ($selection->stages() as $key => $stage)
+                        @php $result = $selection->result($key); @endphp
+                        <li wire:key="stage-{{ $key }}" @class(['rounded-2xl p-4 ring-1', 'bg-leaf-soft/40 ring-leaf/20' => $result, 'bg-frost/40 ring-ice/30' => ! $result && $key === $currentStage, 'ring-line' => ! $result && $key !== $currentStage])>
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <div class="min-w-0">
+                                    <p class="font-bold">{{ $loop->iteration }}. {{ $stage['title'] }}</p>
+                                    <p class="text-xs text-mute">{{ $stage['channel'] }} · Lulus jika: {{ $stage['passes'] }}</p>
+                                </div>
+                                @if ($result)
+                                    <span class="inline-flex items-center gap-1 text-xs font-semibold {{ $selection->isSkipped($key) ? 'text-mute' : 'text-leaf' }}"><flux:icon.circle-check class="size-4" /> {{ $selection->isSkipped($key) ? 'Dilewati' : 'Lolos' }} {{ CarbonImmutable::parse($result['passed_at'])->translatedFormat('j M, H.i') }}</span>
+                                @elseif ($selection->canSkip($key))
+                                    <span class="rounded-full bg-frost px-2.5 py-0.5 text-[11px] font-bold text-ice-deep">Opsional · bersertifikat</span>
+                                @endif
+                            </div>
+                            <ul class="mt-2 list-inside list-disc space-y-0.5 text-xs text-ink-soft">
+                                @foreach ($stage['steps'] as $step)
+                                    <li wire:key="step-{{ $key }}-{{ $loop->index }}">{{ $step }}</li>
+                                @endforeach
+                            </ul>
+                            @if ($result)
+                                @if ($result['note'])
+                                    <p class="mt-2 text-sm">Catatan: {{ $result['note'] }}</p>
+                                @endif
+                                @if ($technician->verification_status === VerificationStatus::Pending)
+                                    <button type="button" wire:click="undoStage('{{ $key }}')" class="mt-2 text-xs font-semibold text-mute hover:text-coral">Batalkan</button>
+                                @endif
+                            @elseif ($technician->verification_status === VerificationStatus::Pending)
+                                <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                                    <input type="text" wire:model="stageNotes.{{ $key }}" placeholder="Catatan hasil (opsional)" class="min-w-0 flex-1 rounded-xl border-0 bg-white px-3 py-2 text-sm ring-1 ring-line" />
+                                    <div class="flex gap-2">
+                                        @if ($key !== 'dokumen' && ($url = $selection->adminMessageUrl($key)))
+                                            <a href="{{ $url }}" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 rounded-xl bg-leaf px-3 py-2 text-xs font-bold text-white hover:opacity-95">
+                                                <flux:icon.message-circle class="size-4" /> Chat WA
+                                            </a>
+                                        @endif
+                                        <x-button size="sm" icon="check" wire:click="passStage('{{ $key }}')">Tandai lolos</x-button>
+                                        @if ($selection->canSkip($key))
+                                            <x-button size="sm" variant="secondary" wire:click="skipStage('{{ $key }}')" wire:confirm="Lewati tahap ini karena sertifikatnya sudah valid?">Lewati</x-button>
+                                        @endif
+                                    </div>
+                                </div>
+                            @endif
+                        </li>
+                    @endforeach
+                    <li @class(['rounded-2xl p-4 text-sm ring-1', 'bg-leaf-soft/40 ring-leaf/20' => $technician->agreement_accepted_at, 'ring-line' => ! $technician->agreement_accepted_at])>
+                        <p class="font-bold">Perjanjian kemitraan</p>
+                        <p class="text-ink-soft">{{ $technician->agreement_accepted_at ? 'Disetujui teknisi '.$technician->agreement_accepted_at->translatedFormat('j M Y, H.i') : 'Belum disetujui. Teknisi menyetujuinya di halaman status pendaftaran setelah orientasi.' }}</p>
+                    </li>
+                </ol>
+            </x-card>
+
             <x-card class="p-5 sm:p-6">
                 <x-section-title icon="user-round" title="Data akun dan usaha" />
                 <dl class="mt-5 grid gap-4 sm:grid-cols-2">
@@ -216,7 +328,10 @@ new #[Layout('layouts::admin'), Title('Detail verifikasi')] class extends Compon
                     @endforeach
                 </div>
                 @error('badge') <p class="mt-2 text-xs text-coral">{{ $message }}</p> @enderror
-                <x-button class="mt-4 w-full" icon="circle-check" wire:click="approve" wire:confirm="Setujui dan publikasikan profil teknisi ini?">Setujui & publikasikan</x-button>
+                @if (! $selection->isReadyToApprove())
+                    <p class="mt-4 rounded-xl bg-sun-soft p-2.5 text-xs text-sun-ink">Tombol aktif setelah semua tahap seleksi lolos dan perjanjian kemitraan disetujui.</p>
+                @endif
+                <x-button class="mt-4 w-full" icon="circle-check" wire:click="approve" wire:confirm="Setujui dan publikasikan profil teknisi ini?" :disabled="! $selection->isReadyToApprove()">Setujui & publikasikan</x-button>
             </x-card>
 
             <x-card class="p-5">

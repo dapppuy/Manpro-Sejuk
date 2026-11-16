@@ -240,7 +240,7 @@ new #[Layout('layouts::mitra'), Title('Profil Teknisi')] class extends Component
                             <option wire:key="r-{{ $option }}" value="{{ $option }}">{{ $option }} km</option>
                         @endforeach
                     </x-form.select>
-                    <x-form.input label="Area layanan (pisahkan dengan koma)" name="areas" wire:model="areas" :disabled="! $editing" />
+                    <x-form.input label="Area layanan (pisahkan dengan koma)" name="areas" wire:model="areas" :disabled="! $editing" :hint="'Area di Sejuk: '.\App\Models\Area::active()->pluck('name')->implode(', ')" />
                 </div>
             </x-card>
 

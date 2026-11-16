@@ -34,6 +34,8 @@ use Illuminate\Support\Carbon;
  * @property TechnicianBadge $badge
  * @property VerificationStatus $verification_status
  * @property string|null $verification_note
+ * @property array<string, array{passed_at: string, note: string|null, by: int|null, skipped?: bool}>|null $selection_progress
+ * @property Carbon|null $agreement_accepted_at
  * @property Carbon|null $verified_at
  * @property bool $is_active
  * @property bool $is_accepting_orders
@@ -56,7 +58,7 @@ use Illuminate\Support\Carbon;
  */
 #[Fillable([
     'business_name', 'slug', 'bio', 'years_experience', 'jobs_count', 'service_radius_km', 'base_area',
-    'latitude', 'longitude', 'badge', 'verification_status', 'verification_note', 'verified_at', 'is_active',
+    'latitude', 'longitude', 'badge', 'verification_status', 'verification_note', 'selection_progress', 'agreement_accepted_at', 'verified_at', 'is_active',
     'is_accepting_orders', 'avg_response_minutes', 'rating_avg', 'reviews_count',
 ])]
 class TechnicianProfile extends Model
@@ -80,6 +82,8 @@ class TechnicianProfile extends Model
             'badge' => TechnicianBadge::class,
             'verification_status' => VerificationStatus::class,
             'verified_at' => 'datetime',
+            'selection_progress' => 'array',
+            'agreement_accepted_at' => 'datetime',
             'is_active' => 'boolean',
             'is_accepting_orders' => 'boolean',
             'rating_avg' => 'float',

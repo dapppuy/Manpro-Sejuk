@@ -13,15 +13,31 @@ use Illuminate\Support\Carbon;
  * @property string $slug
  * @property string $name
  * @property string $description
+ * @property int|null $price_min
+ * @property int|null $price_max
  * @property int $sort_order
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['slug', 'name', 'description', 'sort_order'])]
+#[Fillable(['slug', 'name', 'description', 'price_min', 'price_max', 'sort_order'])]
 class Service extends Model
 {
     /** @use HasFactory<ServiceFactory> */
     use HasFactory;
+
+    /**
+     * Reference price range set by the admin, e.g. "Rp75.000 – Rp150.000".
+     */
+    public function priceRangeLabel(): ?string
+    {
+        if ($this->price_min === null) {
+            return null;
+        }
+
+        return $this->price_max !== null && $this->price_max !== $this->price_min
+            ? rupiah($this->price_min).' – '.rupiah($this->price_max)
+            : 'Mulai '.rupiah($this->price_min);
+    }
 
     /**
      * Lucide icon name for this service.

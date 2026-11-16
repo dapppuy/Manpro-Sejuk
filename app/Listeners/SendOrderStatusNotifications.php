@@ -59,6 +59,14 @@ class SendOrderStatusNotifications
             OrderStatus::Terjadwal => [
                 [$technician, 'Estimasi disetujui', "Kunjungan ke {$customer->name} terjadwal {$slot}."],
             ],
+            OrderStatus::DalamPerjalanan => [
+                [$customer, 'Teknisi sedang menuju lokasimu', $order->trip_eta_minutes
+                    ? "{$business} berangkat dan diperkirakan tiba sekitar pukul ".$order->trip_started_at?->addMinutes($order->trip_eta_minutes)->format('H.i').' WIB.'
+                    : "{$business} sudah berangkat ke {$order->address}."],
+            ],
+            OrderStatus::Pemeriksaan => [
+                [$customer, 'Teknisi sudah tiba', "{$business} sedang memeriksa AC-mu. Rincian biaya final dikirim setelah pemeriksaan."],
+            ],
             OrderStatus::MenungguPersetujuanBiaya => [
                 [$customer, 'Biaya final perlu persetujuanmu', 'Total '.rupiah($order->final_total).'. Pekerjaan baru dimulai setelah kamu menyetujui dan membayar.'],
             ],

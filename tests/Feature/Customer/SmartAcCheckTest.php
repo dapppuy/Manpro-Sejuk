@@ -24,7 +24,7 @@ beforeEach(function () {
             'confidence_level' => 'tinggi',
             'confidence_score' => 80,
             'urgency_level' => 'sedang',
-            'recommended_service_slug' => 'cuci-ac',
+            'recommended_service_slug' => 'cuci',
             'preliminary_advice' => 'Matikan AC sampai teknisi datang.',
         ])]]]]]]),
     ]);
@@ -54,7 +54,7 @@ it('saves the diagnosis and keeps the photos private', function () {
     $diagnosis = Diagnosis::sole();
 
     expect($diagnosis->user_id)->toBe($this->customer->id)
-        ->and($diagnosis->recommended_service_slug)->toBe('cuci-ac');
+        ->and($diagnosis->recommended_service_slug)->toBe('cuci');
     Storage::disk('local')->assertExists($diagnosis->condition_photo_path);
     Storage::disk('public')->assertMissing($diagnosis->condition_photo_path);
 });
@@ -80,4 +80,18 @@ it('limits how many analyses a customer can run per hour', function () {
 
     expect(Diagnosis::count())->toBe(2);
     expect($page->get('errorMessage'))->toContain('2 analisis');
+});
+
+it('carries the diagnosis to the technician search so it can be attached to the request', function () {
+    $unit = CustomerUnit::factory()->for($this->customer)->create();
+
+    Livewire::actingAs($this->customer)->test(SmartAcCheck::class)
+        ->set('customerUnitId', $unit->id)
+        ->set('complaintText', 'AC menyala tapi anginnya tidak dingin sama sekali.')
+        ->call('analyze')
+        ->call('proceedToSearchTechnician')
+        ->assertRedirect(route('search', ['service' => 'cuci']));
+
+    expect(session('sejuk.order_diagnosis'))->toBe(Diagnosis::sole()->id)
+        ->and(session('sejuk.order_unit'))->toBe($unit->id);
 });

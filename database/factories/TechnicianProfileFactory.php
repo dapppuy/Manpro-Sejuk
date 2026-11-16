@@ -7,6 +7,7 @@ use App\Enums\TimeWindow;
 use App\Enums\VerificationStatus;
 use App\Models\TechnicianProfile;
 use App\Models\User;
+use App\Support\TechnicianSelection;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
@@ -53,6 +54,19 @@ class TechnicianProfileFactory extends Factory
             'verification_status' => VerificationStatus::Pending,
             'verified_at' => null,
             'is_accepting_orders' => false,
+        ]);
+    }
+
+    /**
+     * An applicant who passed every selection stage and accepted the partnership agreement.
+     */
+    public function selectionCompleted(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'selection_progress' => collect(TechnicianSelection::STAGES)
+                ->map(fn () => ['passed_at' => now()->toIso8601String(), 'note' => null, 'by' => null])
+                ->all(),
+            'agreement_accepted_at' => now(),
         ]);
     }
 

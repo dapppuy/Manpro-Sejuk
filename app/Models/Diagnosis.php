@@ -56,6 +56,18 @@ class Diagnosis extends Model
     }
 
     /**
+     * Name of the recommended service, falling back to the raw slug.
+     */
+    public function recommendedServiceName(): ?string
+    {
+        if ($this->recommended_service_slug === null) {
+            return null;
+        }
+
+        return Service::where('slug', $this->recommended_service_slug)->value('name') ?? str_replace('-', ' ', $this->recommended_service_slug);
+    }
+
+    /**
      * @return HasOne<Order, $this>
      */
     public function order(): HasOne

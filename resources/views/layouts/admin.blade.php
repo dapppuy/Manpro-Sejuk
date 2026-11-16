@@ -6,6 +6,10 @@
         ['label' => 'Pesanan', 'route' => 'admin.orders.index', 'active' => 'admin.orders.*', 'icon' => 'clipboard-list'],
         ['label' => 'Dana & pencairan', 'route' => 'admin.funds', 'icon' => 'banknote'],
         ['label' => 'Ulasan', 'route' => 'admin.reviews', 'icon' => 'star'],
+        ['label' => 'Kelola akun', 'route' => 'admin.users.index', 'active' => 'admin.users.*', 'icon' => 'user-check'],
+        ['label' => 'Data master', 'route' => 'admin.master', 'icon' => 'sliders-horizontal'],
+        ['label' => 'Konten & kebijakan', 'route' => 'admin.content', 'icon' => 'file-text'],
+        ['label' => 'Log audit', 'route' => 'admin.audit', 'icon' => 'list-checks'],
     ])->filter(fn (array $item) => Route::has($item['route']))->values()->all();
 @endphp
 

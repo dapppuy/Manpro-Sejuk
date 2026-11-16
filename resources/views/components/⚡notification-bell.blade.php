@@ -8,6 +8,31 @@ use Livewire\Component;
 new class extends Component {
     public bool $dark = false;
 
+    /**
+     * Newest unread notification already announced, so polling only pops up new ones.
+     */
+    public ?string $lastAnnouncedId = null;
+
+    public function mount(): void
+    {
+        $this->lastAnnouncedId = auth()->user()->unreadNotifications()->latest()->value('id');
+    }
+
+    /**
+     * Polled every 30 seconds: announces a notification that arrived since the last check.
+     */
+    public function checkForNew(): void
+    {
+        $newest = auth()->user()->unreadNotifications()->latest()->first();
+
+        if ($newest === null || $newest->id === $this->lastAnnouncedId) {
+            return;
+        }
+
+        $this->lastAnnouncedId = $newest->id;
+        $this->dispatch('sejuk-notification', title: (string) ($newest->data['title'] ?? 'Pembaruan'), body: (string) ($newest->data['body'] ?? ''));
+    }
+
     #[Computed]
     public function unreadCount(): int
     {
@@ -42,7 +67,19 @@ new class extends Component {
     }
 }; ?>
 
-<div class="relative" x-data="{ open: false }" @click.outside="open = false" @keydown.escape.window="open = false" wire:poll.30s>
+<div class="relative" wire:poll.30s="checkForNew"
+    x-data="{
+        open: false,
+        canAsk: 'Notification' in window && Notification.permission === 'default',
+        ask() { Notification.requestPermission().then(() => this.canAsk = false) },
+        announce(detail) {
+            $flux.toast({ heading: detail.title, text: detail.body });
+            if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
+                new Notification(detail.title, { body: detail.body, icon: '/favicon.ico' });
+            }
+        },
+    }"
+    @sejuk-notification.window="announce($event.detail)" @click.outside="open = false" @keydown.escape.window="open = false">
     <button type="button" @click="open = ! open" :aria-expanded="open" aria-label="Notifikasi{{ $this->unreadCount ? ', '.$this->unreadCount.' belum dibaca' : '' }}"
         @class(['relative grid size-9 place-items-center rounded-full transition', 'text-white/70 hover:bg-white/10 hover:text-white' => $dark, 'bg-white text-ink ring-1 ring-line hover:ring-ink/30' => ! $dark])>
         <flux:icon.bell class="size-[18px]" />
@@ -59,6 +96,9 @@ new class extends Component {
                 <button type="button" wire:click="markAllRead" class="text-xs font-semibold text-ice hover:text-ice-deep">Tandai semua dibaca</button>
             @endif
         </div>
+        <button type="button" x-show="canAsk" x-cloak @click="ask()" class="flex w-full items-center gap-2 border-b border-line bg-frost/50 px-4 py-2.5 text-left text-xs font-semibold text-ice-deep hover:bg-frost">
+            <flux:icon.bell-ring class="size-4 shrink-0" /> Aktifkan notifikasi di browser ini
+        </button>
         <div class="max-h-96 overflow-y-auto">
             @forelse ($this->latest as $notification)
                 <button type="button" wire:key="n-{{ $notification->id }}" wire:click="open('{{ $notification->id }}')"

@@ -168,7 +168,7 @@
 
             <div class="pt-3 flex flex-wrap items-center justify-between gap-3 border-t border-gray-100">
                 <div class="text-xs text-gray-600">
-                    Rekomendasi Layanan: <strong class="uppercase text-gray-900">{{ str_replace('-', ' ', $diagnosis->recommended_service_slug) }}</strong>
+                    Rekomendasi Layanan: <strong class="uppercase text-gray-900">{{ $diagnosis->recommendedServiceName() }}</strong>
                 </div>
                 <button type="button" wire:click="proceedToSearchTechnician"
                     style="background-color: #18181b; color: #ffffff;"
@@ -366,7 +366,7 @@
 
             <div class="pt-3 flex flex-wrap items-center justify-between gap-3 border-t border-line">
                 <div class="text-xs text-ink-soft">
-                    Rekomendasi Layanan: <strong class="uppercase text-ink">{{ str_replace('-', ' ', $diagnosis->recommended_service_slug) }}</strong>
+                    Rekomendasi Layanan: <strong class="uppercase text-ink">{{ $diagnosis->recommendedServiceName() }}</strong>
                 </div>
                 <x-button type="button" variant="dark" wire:click="proceedToSearchTechnician">
                     Cari Teknisi dengan Hasil Ini &rarr;

@@ -36,7 +36,7 @@ new #[Layout('layouts::admin')] class extends Component {
     {
         $this->order->load([
             'customer', 'technician.user', 'service', 'media', 'costItems', 'payments', 'review',
-            'workProofs', 'offers.technician', 'statusLogs' => fn ($logs) => $logs->with('actor')->orderBy('id'),
+            'workProofs', 'diagnosis', 'offers.technician', 'statusLogs' => fn ($logs) => $logs->with('actor')->orderBy('id'),
         ]);
 
         return $this->view()->title('Pesanan #'.$this->order->code);
@@ -106,6 +106,10 @@ new #[Layout('layouts::admin')] class extends Component {
                     <p class="mt-4 rounded-xl bg-paper px-3 py-2 text-sm text-ink-soft">“{{ $order->notes }}”</p>
                 @endif
             </x-card>
+
+            @if ($order->diagnosis)
+                <x-order.diagnosis :diagnosis="$order->diagnosis" />
+            @endif
 
             @if ($order->costItems->isNotEmpty())
                 <x-card class="overflow-hidden">

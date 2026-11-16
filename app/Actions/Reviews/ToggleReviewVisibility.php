@@ -2,6 +2,7 @@
 
 namespace App\Actions\Reviews;
 
+use App\Models\AuditLog;
 use App\Models\Review;
 use App\Models\TechnicianProfile;
 use Illuminate\Support\Facades\DB;
@@ -33,6 +34,7 @@ class ToggleReviewVisibility
             ]);
 
             $review->update(['is_hidden' => ! $review->is_hidden]);
+            AuditLog::record('review.visibility_changed', "Ulasan untuk {$technician->business_name} ".($review->is_hidden ? 'disembunyikan' : 'ditampilkan lagi'), $review);
 
             return $review;
         });

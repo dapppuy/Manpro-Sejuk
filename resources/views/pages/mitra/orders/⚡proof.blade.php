@@ -32,6 +32,13 @@ new #[Layout('layouts::mitra'), Title('Upload Bukti Kerja')] class extends Compo
     public string $actions = '';
 
     /**
+     * What the technician actually found, compared with the Cek AC Pintar estimate (TK-18).
+     */
+    public string $actualCause = '';
+
+    public string $diagnosisAccurate = '';
+
+    /**
      * Months until the next recommended service; 0 means no recommendation.
      */
     public int $nextServiceMonths = 3;
@@ -46,7 +53,13 @@ new #[Layout('layouts::mitra'), Title('Upload Bukti Kerja')] class extends Compo
             return;
         }
 
-        $this->order = $order->load(['service', 'workProofs', 'customerUnit']);
+        $this->order = $order->load(['service', 'workProofs', 'customerUnit', 'diagnosis']);
+        $this->actualCause = (string) $this->order->diagnosis?->actual_cause_by_technician;
+        $this->diagnosisAccurate = match ($this->order->diagnosis?->is_accurate) {
+            true => 'ya',
+            false => 'tidak',
+            null => '',
+        };
 
         $existingLog = UnitServiceLog::where('order_id', $order->id)->first();
 
@@ -78,6 +91,8 @@ new #[Layout('layouts::mitra'), Title('Upload Bukti Kerja')] class extends Compo
             'findings' => ['nullable', 'string', 'max:1000'],
             'actions' => [Rule::requiredIf($this->order->customer_unit_id !== null), 'nullable', 'string', 'max:1000'],
             'nextServiceMonths' => ['integer', Rule::in([0, 1, 3, 6, 12])],
+            'actualCause' => [Rule::requiredIf($this->order->diagnosis_id !== null), 'nullable', 'string', 'max:1000'],
+            'diagnosisAccurate' => [Rule::requiredIf($this->order->diagnosis_id !== null), 'nullable', Rule::in(['ya', 'tidak'])],
         ];
     }
 
@@ -86,7 +101,7 @@ new #[Layout('layouts::mitra'), Title('Upload Bukti Kerja')] class extends Compo
      */
     protected function validationAttributes(): array
     {
-        return ['before' => 'foto sebelum', 'after' => 'foto sesudah', 'note' => 'catatan', 'findings' => 'temuan pemeriksaan', 'actions' => 'tindakan yang dilakukan'];
+        return ['before' => 'foto sebelum', 'after' => 'foto sesudah', 'note' => 'catatan', 'findings' => 'temuan pemeriksaan', 'actions' => 'tindakan yang dilakukan', 'actualCause' => 'penyebab sebenarnya', 'diagnosisAccurate' => 'kesesuaian perkiraan AI'];
     }
 
     public function submit(OrderWorkflow $workflow): void
@@ -102,6 +117,11 @@ new #[Layout('layouts::mitra'), Title('Upload Bukti Kerja')] class extends Compo
             ];
 
             $workflow->submitProof($this->order, auth()->user()->technicianProfile, $this->before, $this->after, $validated['note'] ?: null, $unitRecord);
+
+            $this->order->diagnosis?->update([
+                'actual_cause_by_technician' => $validated['actualCause'],
+                'is_accurate' => $validated['diagnosisAccurate'] === 'ya',
+            ]);
         } catch (InvalidOrderTransition $exception) {
             Flux::toast(variant: 'danger', text: $exception->getMessage());
 
@@ -165,6 +185,24 @@ new #[Layout('layouts::mitra'), Title('Upload Bukti Kerja')] class extends Compo
             </div>
 
             <x-form.textarea label="Catatan hasil pekerjaan" name="note" rows="4" wire:model="note" placeholder="Jelaskan pekerjaan yang dilakukan dan kondisi AC setelah servis." />
+
+            @if ($order->diagnosis)
+                <div class="space-y-4 rounded-2xl bg-paper p-4 ring-1 ring-line sm:p-5">
+                    <div class="flex items-start gap-3">
+                        <flux:icon.sparkles class="mt-0.5 size-5 shrink-0 text-ice" />
+                        <div>
+                            <p class="font-bold">Bandingkan dengan Cek AC Pintar</p>
+                            <p class="text-sm text-ink-soft">Perkiraan AI: {{ collect($order->diagnosis->possible_causes ?? [])->pluck('title')->take(2)->implode(', ') ?: '–' }}. Catatanmu membantu Sejuk menilai ketepatan AI.</p>
+                        </div>
+                    </div>
+                    <x-form.textarea label="Penyebab sebenarnya" name="actualCause" rows="2" wire:model="actualCause" placeholder="Contoh: kapasitor kipas outdoor lemah, bukan freon habis." required />
+                    <x-form.select label="Apakah perkiraan AI sesuai?" name="diagnosisAccurate" wire:model="diagnosisAccurate" required>
+                        <option value="">Pilih</option>
+                        <option value="ya">Ya, sesuai atau mendekati</option>
+                        <option value="tidak">Tidak sesuai</option>
+                    </x-form.select>
+                </div>
+            @endif
 
             @if ($order->customerUnit)
                 <div class="space-y-4 rounded-2xl bg-frost/60 p-4 ring-1 ring-ice/20 sm:p-5">

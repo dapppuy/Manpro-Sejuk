@@ -23,7 +23,7 @@ new #[Layout('layouts::mitra'), Title('Input Biaya Final')] class extends Compon
     {
         Gate::authorize('respond', $order);
 
-        if (! in_array($order->status, [OrderStatus::Terjadwal, OrderStatus::MenungguPersetujuanBiaya], true)) {
+        if (! in_array($order->status, [OrderStatus::Terjadwal, OrderStatus::DalamPerjalanan, OrderStatus::Pemeriksaan, OrderStatus::MenungguPersetujuanBiaya], true)) {
             $this->redirectRoute('mitra.orders.show', $order);
 
             return;

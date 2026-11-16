@@ -187,7 +187,12 @@ new #[Layout('layouts::customer'), Title('Daftar Sejuk Mitra')] class extends Co
                 <x-form.input label="Nomor WhatsApp" name="phone" type="tel" wire:model="phone" placeholder="0812 3456 7890" autocomplete="tel" required />
                 <x-form.input label="Email" name="email" type="email" wire:model="email" autocomplete="email" required />
                 <x-form.input label="Kata sandi" name="password" type="password" wire:model="password" autocomplete="new-password" required />
-                <x-form.input label="Area layanan" name="area" wire:model="area" placeholder="Lowokwaru, Malang" required />
+                <x-form.input label="Area layanan" name="area" wire:model="area" placeholder="Lowokwaru, Malang" list="sejuk-areas" required />
+                <datalist id="sejuk-areas">
+                    @foreach (\App\Models\Area::active()->pluck('name') as $areaName)
+                        <option value="{{ $areaName }}, Malang"></option>
+                    @endforeach
+                </datalist>
                 <x-form.select label="Layanan utama" name="service_id" wire:model="service_id" required>
                     @foreach ($this->services as $service)
                         <option wire:key="opt-{{ $service->id }}" value="{{ $service->id }}">{{ $service->name }}</option>
@@ -259,6 +264,7 @@ new #[Layout('layouts::customer'), Title('Daftar Sejuk Mitra')] class extends Co
         @error('agreed') <p class="-mt-4 text-xs font-medium text-coral">{{ $message }}</p> @enderror
 
         <div class="flex flex-wrap items-center gap-4">
+            <p class="text-xs text-mute">Dengan mendaftar, kamu menyetujui <a href="{{ route('pages.terms') }}" target="_blank" class="font-semibold text-ink hover:underline">Syarat & Ketentuan</a> dan <a href="{{ route('pages.privacy') }}" target="_blank" class="font-semibold text-ink hover:underline">Kebijakan Privasi</a>. Perjanjian kemitraan disetujui setelah orientasi.</p>
             <x-button type="submit" size="lg" icon-trailing="arrow-right" :disabled="! $this->canSubmit" wire:loading.attr="disabled" wire:target="register">
                 Kirim untuk diverifikasi
             </x-button>

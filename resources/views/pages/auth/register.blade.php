@@ -35,6 +35,8 @@
                 viewable
             />
 
+            <p class="text-center text-xs text-mute">Dengan mendaftar, kamu menyetujui <a href="{{ route('pages.terms') }}" target="_blank" class="font-semibold text-ink hover:underline">Syarat & Ketentuan</a> dan <a href="{{ route('pages.privacy') }}" target="_blank" class="font-semibold text-ink hover:underline">Kebijakan Privasi</a> Sejuk.</p>
+
             <x-button type="submit" variant="dark" size="lg" class="w-full" data-test="register-user-button">
                 Buat akun
             </x-button>

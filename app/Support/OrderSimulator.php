@@ -40,7 +40,7 @@ class OrderSimulator
                 'declineRequest' => 'Teknisi menolak',
                 'expireResponse' => 'Lewati batas 15 menit',
             ],
-            OrderStatus::Terjadwal => [
+            OrderStatus::Terjadwal, OrderStatus::DalamPerjalanan, OrderStatus::Pemeriksaan => [
                 'sendFinalCost' => 'Teknisi kirim biaya final (sesuai estimasi)',
                 'sendFinalCostWithExtras' => 'Teknisi kirim biaya final + tambahan',
             ],

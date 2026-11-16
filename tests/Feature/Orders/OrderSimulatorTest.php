@@ -24,7 +24,8 @@ it('walks an order from request to completion in local mode', function () {
     app()['env'] = 'local';
     config()->set('sejuk.simulation', true);
 
-    $page = Livewire::test('pages::orders.show', ['order' => $this->order])->assertSee('Panel simulasi');
+    // The panel's buttons are hidden in the view for now; the simulate action itself still drives the flow.
+    $page = Livewire::test('pages::orders.show', ['order' => $this->order]);
 
     $page->call('simulate', 'sendEstimate');
     expect($this->order->refresh()->status)->toBe(OrderStatus::EstimasiMasuk)

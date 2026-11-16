@@ -8,6 +8,8 @@ enum OrderStatus: string
     case CariCadangan = 'cari_cadangan';
     case EstimasiMasuk = 'estimasi_masuk';
     case Terjadwal = 'terjadwal';
+    case DalamPerjalanan = 'dalam_perjalanan';
+    case Pemeriksaan = 'pemeriksaan';
     case MenungguPersetujuanBiaya = 'menunggu_persetujuan_biaya';
     case MenungguPembayaran = 'menunggu_pembayaran';
     case Dikerjakan = 'dikerjakan';
@@ -24,6 +26,8 @@ enum OrderStatus: string
             self::CariCadangan => 'Mencari cadangan',
             self::EstimasiMasuk => 'Estimasi masuk',
             self::Terjadwal => 'Terjadwal',
+            self::DalamPerjalanan => 'Teknisi dalam perjalanan',
+            self::Pemeriksaan => 'Pemeriksaan unit',
             self::MenungguPersetujuanBiaya => 'Perlu persetujuan',
             self::MenungguPembayaran => 'Menunggu pembayaran',
             self::Dikerjakan => 'Sedang dikerjakan',
@@ -42,7 +46,7 @@ enum OrderStatus: string
     {
         return match ($this) {
             self::MenungguRespons, self::MenungguPersetujuanBiaya, self::MenungguPembayaran, self::MenungguKonfirmasi, self::PerbaikanUlang => 'sun',
-            self::CariCadangan, self::EstimasiMasuk, self::Terjadwal, self::Dikerjakan => 'ice',
+            self::CariCadangan, self::EstimasiMasuk, self::Terjadwal, self::DalamPerjalanan, self::Pemeriksaan, self::Dikerjakan => 'ice',
             self::Sengketa, self::Dibatalkan => 'coral',
             self::Selesai => 'leaf',
         };
@@ -57,7 +61,7 @@ enum OrderStatus: string
         return match ($this) {
             self::MenungguRespons, self::CariCadangan, self::Dibatalkan => 0,
             self::EstimasiMasuk => 1,
-            self::Terjadwal => 2,
+            self::Terjadwal, self::DalamPerjalanan, self::Pemeriksaan => 2,
             self::MenungguPersetujuanBiaya => 3,
             self::MenungguPembayaran => 4,
             self::Dikerjakan, self::PerbaikanUlang => 5,

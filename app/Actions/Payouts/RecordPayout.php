@@ -4,6 +4,7 @@ namespace App\Actions\Payouts;
 
 use App\Enums\FundStatus;
 use App\Exceptions\InvalidOrderTransition;
+use App\Models\AuditLog;
 use App\Models\Order;
 use App\Models\Payout;
 use App\Models\TechnicianProfile;
@@ -46,6 +47,7 @@ class RecordPayout
             ]);
 
             Order::whereKey($orders->modelKeys())->update(['fund_status' => FundStatus::Dicairkan, 'payout_id' => $payout->id]);
+            AuditLog::record('payout.recorded', 'Pencairan '.rupiah($payout->amount)." ke {$technician->business_name} ({$orders->count()} pesanan)", $payout, ['reference' => $reference], $admin);
 
             return $payout;
         });

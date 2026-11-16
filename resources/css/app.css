@@ -103,3 +103,45 @@ textarea:focus[data-flux-control],
 select:focus[data-flux-control] {
     @apply outline-hidden ring-2 ring-accent ring-offset-2 ring-offset-accent-foreground;
 }
+
+/* Long-form text pages (terms, privacy, help) rendered from Markdown. */
+.prose-sejuk {
+    @apply text-[15px] leading-relaxed text-ink-soft;
+
+    & h2 {
+        @apply mt-9 mb-3 text-xl font-extrabold text-ink;
+    }
+
+    & h3 {
+        @apply mt-6 mb-2 text-base font-bold text-ink;
+    }
+
+    & p {
+        @apply my-3;
+    }
+
+    & ul,
+    & ol {
+        @apply my-3 space-y-1.5 pl-5;
+    }
+
+    & ul {
+        @apply list-disc;
+    }
+
+    & ol {
+        @apply list-decimal;
+    }
+
+    & strong {
+        @apply font-semibold text-ink;
+    }
+
+    & a {
+        @apply font-semibold text-ice underline-offset-2 hover:underline;
+    }
+
+    & > :first-child {
+        @apply mt-0;
+    }
+}

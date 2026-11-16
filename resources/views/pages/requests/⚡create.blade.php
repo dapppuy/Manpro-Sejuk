@@ -5,6 +5,7 @@ use App\Enums\OrderStatus;
 use App\Enums\TimeWindow;
 use App\Exceptions\InvalidOrderTransition;
 use App\Models\CustomerUnit;
+use App\Models\Diagnosis;
 use App\Models\Order;
 use App\Models\TechnicianProfile;
 use App\Models\UnitIssueReport;
@@ -46,6 +47,11 @@ new #[Layout('layouts::customer'), Title('Minta penawaran')] class extends Compo
      */
     public ?int $customer_unit_id = null;
 
+    /**
+     * The customer's Cek AC Pintar result sent along with the request, so the technician sees it.
+     */
+    public ?int $diagnosis_id = null;
+
     public string $ac_capacity = '';
 
     public string $ac_brand = '';
@@ -83,6 +89,14 @@ new #[Layout('layouts::customer'), Title('Minta penawaran')] class extends Compo
         }
 
         $this->service_id = $this->offeredServices->firstWhere('slug', $this->serviceSlug)?->id ?? $this->offeredServices->first()?->id;
+
+        $chosenDiagnosis = session('sejuk.order_diagnosis');
+
+        if (is_int($chosenDiagnosis) && auth()->user()->diagnoses()->whereKey($chosenDiagnosis)->whereDoesntHave('order')->exists()) {
+            $this->diagnosis_id = $chosenDiagnosis;
+            $this->notes = $this->diagnosis?->complaint_text ?? '';
+            $this->service_id = $this->offeredServices->firstWhere('slug', $this->diagnosis?->recommended_service_slug)->id ?? $this->service_id;
+        }
 
         $chosenUnit = session('sejuk.order_unit');
 
@@ -173,6 +187,22 @@ new #[Layout('layouts::customer'), Title('Minta penawaran')] class extends Compo
         return auth()->user()->customerUnits()->orderBy('name')->get();
     }
 
+    #[Computed]
+    public function diagnosis(): ?Diagnosis
+    {
+        return $this->diagnosis_id === null ? null : auth()->user()->diagnoses()->find($this->diagnosis_id);
+    }
+
+    /**
+     * The customer decides not to send the AI result with this request.
+     */
+    public function detachDiagnosis(): void
+    {
+        $this->diagnosis_id = null;
+        session()->forget('sejuk.order_diagnosis');
+        unset($this->diagnosis);
+    }
+
     /**
      * Fill brand and capacity from the chosen unit when they are known.
      */
@@ -222,6 +252,7 @@ new #[Layout('layouts::customer'), Title('Minta penawaran')] class extends Compo
         return [
             'service_id' => ['required', Rule::in($this->offeredServices->pluck('id')->all())],
             'customer_unit_id' => ['nullable', Rule::in($this->units->pluck('id')->all())],
+            'diagnosis_id' => ['nullable', Rule::exists('diagnoses', 'id')->where('user_id', auth()->id())],
             'ac_capacity' => ['required', Rule::enum(AcCapacity::class)],
             'ac_brand' => ['required', Rule::in(config('sejuk.brands'))],
             'ac_brand_other' => ['required_if:ac_brand,Lainnya', 'nullable', 'string', 'max:50'],
@@ -271,6 +302,7 @@ new #[Layout('layouts::customer'), Title('Minta penawaran')] class extends Compo
         $details = [
             'service_id' => $validated['service_id'],
             'customer_unit_id' => $validated['customer_unit_id'] ?? null,
+            'diagnosis_id' => $validated['diagnosis_id'] ?? null,
             'ac_capacity' => $validated['ac_capacity'],
             'ac_brand' => $validated['ac_brand'],
             'ac_brand_other' => $validated['ac_brand'] === 'Lainnya' ? $validated['ac_brand_other'] : null,
@@ -298,7 +330,7 @@ new #[Layout('layouts::customer'), Title('Minta penawaran')] class extends Compo
         }
 
         $location->set($validated['address'], $details['latitude'], $details['longitude'], detail: $details['address_detail']);
-        session()->forget(['sejuk.hidden_technicians', 'sejuk.rejected_notice', 'sejuk.pending_order', 'sejuk.order_unit']);
+        session()->forget(['sejuk.hidden_technicians', 'sejuk.rejected_notice', 'sejuk.pending_order', 'sejuk.order_unit', 'sejuk.order_diagnosis']);
 
         if ($order->customer_unit_id !== null) {
             $order->customerUnit?->issueReports()
@@ -323,6 +355,7 @@ new #[Layout('layouts::customer'), Title('Minta penawaran')] class extends Compo
     {
         $this->service_id = $this->offeredServices->contains('id', $order->service_id) ? $order->service_id : $this->offeredServices->first()?->id;
         $this->customer_unit_id = $order->customer_unit_id;
+        $this->diagnosis_id = $order->diagnosis_id;
         $this->ac_capacity = $order->ac_capacity->value;
         $this->ac_brand = $order->ac_brand;
         $this->ac_brand_other = (string) $order->ac_brand_other;
@@ -378,6 +411,17 @@ new #[Layout('layouts::customer'), Title('Minta penawaran')] class extends Compo
                     </select>
                     @error('service_id') <p class="mt-1.5 text-xs font-medium text-coral">{{ $message }}</p> @enderror
                 </div>
+
+                @if ($this->diagnosis)
+                    <div class="flex items-start gap-3 rounded-2xl bg-frost/60 p-4 text-sm ring-1 ring-ice/20">
+                        <flux:icon.sparkles class="mt-0.5 size-5 shrink-0 text-ice" />
+                        <div class="min-w-0 flex-1">
+                            <p class="font-bold">Hasil Cek AC Pintar ikut dikirim ke teknisi</p>
+                            <p class="mt-0.5 text-ink-soft">Perkiraan: {{ collect($this->diagnosis->possible_causes ?? [])->pluck('title')->take(2)->implode(', ') ?: 'lihat detail di halaman Cek AC Pintar' }}. Teknisi tetap memeriksa langsung di lokasi.</p>
+                        </div>
+                        <button type="button" wire:click="detachDiagnosis" class="shrink-0 text-xs font-semibold text-mute hover:text-coral">Lepas</button>
+                    </div>
+                @endif
 
                 <div>
                     <label for="unit" class="mb-2 block text-sm font-semibold">Unit AC <span class="font-normal text-mute">(opsional)</span></label>

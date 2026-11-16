@@ -21,6 +21,11 @@ Route::post('webhooks/midtrans', MidtransWebhookController::class)->name('webhoo
 
 Route::livewire('u/{qrToken}', 'pages::units.qr')->name('unit.qr.show');
 
+Route::livewire('syarat-ketentuan', 'pages::content-page')->defaults('slug', 'syarat-ketentuan')->name('pages.terms');
+Route::livewire('kebijakan-privasi', 'pages::content-page')->defaults('slug', 'kebijakan-privasi')->name('pages.privacy');
+Route::livewire('perjanjian-kemitraan', 'pages::content-page')->defaults('slug', 'perjanjian-kemitraan')->name('pages.partnership');
+Route::livewire('bantuan', 'pages::content-page')->defaults('slug', 'bantuan')->name('pages.help');
+
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardRedirectController::class)->name('dashboard');
     Route::get('pesanan/media/{media}', OrderMediaController::class)->name('orders.media');
@@ -73,6 +78,11 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'role:ad
     Route::livewire('pesanan/{order}', 'pages::admin.orders.show')->name('orders.show');
     Route::livewire('dana', 'pages::admin.funds')->name('funds');
     Route::livewire('ulasan', 'pages::admin.reviews')->name('reviews');
+    Route::livewire('akun', 'pages::admin.users.index')->name('users.index');
+    Route::livewire('akun/{user}', 'pages::admin.users.show')->name('users.show');
+    Route::livewire('data-master', 'pages::admin.master')->name('master');
+    Route::livewire('konten', 'pages::admin.content')->name('content');
+    Route::livewire('log-audit', 'pages::admin.audit')->name('audit');
     Route::get('dokumen/{document}', TechnicianDocumentController::class)->name('documents.show');
 });
 

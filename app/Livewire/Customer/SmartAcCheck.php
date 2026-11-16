@@ -150,13 +150,20 @@ class SmartAcCheck extends Component
 
     public function proceedToSearchTechnician(): void
     {
-        $params = $this->diagnosis ? [
-            'service' => $this->diagnosis->recommended_service_slug,
-            'diagnosis_id' => $this->diagnosis->id,
-            'unit_id' => $this->diagnosis->customer_unit_id,
-        ] : [];
+        if ($this->diagnosis === null) {
+            $this->redirectRoute('search');
 
-        $this->redirectRoute('search', $params);
+            return;
+        }
+
+        // The request form attaches this diagnosis (and its unit) so the technician sees the AI result.
+        session(['sejuk.order_diagnosis' => $this->diagnosis->id]);
+
+        if ($this->diagnosis->customer_unit_id !== null) {
+            session(['sejuk.order_unit' => $this->diagnosis->customer_unit_id]);
+        }
+
+        $this->redirectRoute('search', array_filter(['service' => $this->diagnosis->recommended_service_slug]));
     }
 
     public function render(): View

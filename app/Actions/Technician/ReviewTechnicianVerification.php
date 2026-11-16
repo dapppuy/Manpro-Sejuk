@@ -6,6 +6,7 @@ use App\Enums\DocumentStatus;
 use App\Enums\TechnicianBadge;
 use App\Enums\TimeWindow;
 use App\Enums\VerificationStatus;
+use App\Models\AuditLog;
 use App\Models\TechnicianProfile;
 use App\Models\User;
 use App\Notifications\TechnicianVerificationReviewed;
@@ -49,6 +50,7 @@ class ReviewTechnicianVerification
                 }
             }
 
+            AuditLog::record('technician.approved', "{$technician->business_name} disetujui dengan badge {$badge->label()}", $technician, actor: $admin);
             $technician->user->notify(new TechnicianVerificationReviewed($technician, approved: true));
         });
     }
@@ -68,6 +70,7 @@ class ReviewTechnicianVerification
                 'reviewed_at' => now(),
             ]);
 
+            AuditLog::record('technician.rejected', "{$technician->business_name} ditolak: {$reason}", $technician, actor: $admin);
             $technician->user->notify(new TechnicianVerificationReviewed($technician, approved: false));
         });
     }

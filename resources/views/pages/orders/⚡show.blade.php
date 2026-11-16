@@ -260,7 +260,7 @@ new #[Layout('layouts::customer')] class extends Component {
 @endphp
 
 <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6"
-    @if (in_array($status, [OrderStatus::MenungguRespons, OrderStatus::EstimasiMasuk, OrderStatus::Terjadwal, OrderStatus::MenungguPersetujuanBiaya, OrderStatus::Dikerjakan, OrderStatus::PerbaikanUlang], true)) wire:poll.10s="refreshOrder" @endif>
+    @if (in_array($status, [OrderStatus::MenungguRespons, OrderStatus::EstimasiMasuk, OrderStatus::Terjadwal, OrderStatus::DalamPerjalanan, OrderStatus::Pemeriksaan, OrderStatus::MenungguPersetujuanBiaya, OrderStatus::Dikerjakan, OrderStatus::PerbaikanUlang], true)) wire:poll.10s="refreshOrder" @endif>
     <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
             <p class="text-sm text-mute tnum">Pesanan #{{ $order->code }}</p>
@@ -387,6 +387,33 @@ new #[Layout('layouts::customer')] class extends Component {
                     <x-order.panel>
                         <p class="font-bold">Langkah berikutnya</p>
                         <p class="mt-1 text-sm text-ink-soft">Setelah memeriksa AC di lokasi, teknisi mengirim rincian biaya final. Pekerjaan baru dimulai setelah kamu menyetujuinya.</p>
+                    </x-order.panel>
+                    @break
+
+                @case(OrderStatus::DalamPerjalanan)
+                    @php $eta = $order->trip_eta_minutes ? $order->trip_started_at?->addMinutes($order->trip_eta_minutes) : null; @endphp
+                    <x-order.panel tone="frost" icon="navigation" title="Teknisi sedang menuju lokasimu" :sub="$technician?->user->name.' berangkat pukul '.$order->trip_started_at?->format('H.i').' WIB.'">
+                        <div class="mt-6 grid gap-4 sm:grid-cols-2">
+                            <div class="rounded-2xl bg-white p-5 ring-1 ring-ice/15">
+                                <p class="flex items-center gap-1.5 text-xs text-mute"><flux:icon.clock class="size-3.5" /> Perkiraan tiba</p>
+                                <p class="mt-1 text-2xl font-extrabold tnum sm:text-3xl">{{ $eta ? '± '.$eta->format('H.i').' WIB' : 'Segera' }}</p>
+                            </div>
+                            <div class="rounded-2xl bg-white p-5 ring-1 ring-ice/15">
+                                <p class="flex items-center gap-1.5 text-xs text-mute"><flux:icon.map-pin class="size-3.5" /> Tujuan</p>
+                                <p class="mt-1 font-bold">{{ $order->address }}</p>
+                                <p class="text-ink-soft">{{ $order->address_detail ?: 'Tanpa detail tambahan' }}</p>
+                            </div>
+                        </div>
+                        <p class="mt-5 flex items-start gap-2 text-sm text-ink-soft">
+                            <flux:icon.bell-ring class="mt-0.5 size-4 shrink-0 text-ice" />
+                            Kamu akan diberi tahu lagi saat teknisi sudah tiba.
+                        </p>
+                    </x-order.panel>
+                    @break
+
+                @case(OrderStatus::Pemeriksaan)
+                    <x-order.panel tone="frost" icon="wrench" title="Teknisi sedang memeriksa AC" :sub="$technician?->user->name.' tiba pukul '.$order->arrived_at?->format('H.i').' WIB.'">
+                        <p class="mt-5 text-sm text-ink-soft">Setelah pemeriksaan, teknisi mengirim rincian biaya final. Pekerjaan baru dimulai setelah kamu menyetujui dan membayar.</p>
                     </x-order.panel>
                     @break
 
@@ -645,7 +672,7 @@ new #[Layout('layouts::customer')] class extends Component {
                             </div>
                         </div>
                     </div>
-                    @if ($status === OrderStatus::Terjadwal && $technician->user->phone)
+                    @if (in_array($status, [OrderStatus::Terjadwal, OrderStatus::DalamPerjalanan, OrderStatus::Pemeriksaan], true) && $technician->user->phone)
                         <x-button variant="secondary" size="sm" icon="message-circle" class="mt-4 w-full" :href="'https://wa.me/62'.substr($technician->user->phone, 1)" target="_blank" rel="noopener">
                             Hubungi via WhatsApp
                         </x-button>
@@ -662,7 +689,7 @@ new #[Layout('layouts::customer')] class extends Component {
                         'Jadwal' => $scheduleDate->translatedFormat('l, j F').', '.($order->scheduled_window ? $scheduleWindow->range().' WIB' : str($scheduleWindow->label())->lower()),
                         'Estimasi' => $order->estimate_min ? rupiah($order->estimate_min).' – '.rupiah($order->estimate_max) : null,
                         'Garansi' => $order->warranty ? config('sejuk.warranty.days').' hari' : null,
-                        'Biaya final' => $order->final_total !== null && ! in_array($status, [OrderStatus::Terjadwal, OrderStatus::Dibatalkan], true) ? rupiah($order->final_total) : null,
+                        'Biaya final' => $order->final_total !== null && ! in_array($status, [OrderStatus::Terjadwal, OrderStatus::DalamPerjalanan, OrderStatus::Pemeriksaan, OrderStatus::Dibatalkan], true) ? rupiah($order->final_total) : null,
                         'Pembayaran' => $order->paidPayment() ? $order->paidPayment()->method->label().' · '.($order->fund_status === \App\Enums\FundStatus::Ditahan ? 'Ditahan Sejuk' : 'Diteruskan') : null,
                     ]) as $label => $value)
                         <div wire:key="row-{{ $loop->index }}" class="flex justify-between gap-4">

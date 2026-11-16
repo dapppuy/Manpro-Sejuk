@@ -26,6 +26,8 @@ use Illuminate\Support\Str;
  * @property string $password
  * @property UserRole $role
  * @property string|null $city
+ * @property Carbon|null $suspended_at
+ * @property string|null $suspension_reason
  * @property string|null $avatar_path
  * @property string|null $two_factor_secret
  * @property string|null $two_factor_recovery_codes
@@ -55,6 +57,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'phone_verified_at' => 'datetime',
             'password' => 'hashed',
             'role' => UserRole::class,
+            'suspended_at' => 'datetime',
         ];
     }
 
@@ -149,6 +152,27 @@ class User extends Authenticatable implements MustVerifyEmail
     public function customerUnits(): HasMany
     {
         return $this->hasMany(CustomerUnit::class);
+    }
+
+    public function isSuspended(): bool
+    {
+        return $this->suspended_at !== null;
+    }
+
+    /**
+     * @return HasMany<AccountWarning, $this>
+     */
+    public function warnings(): HasMany
+    {
+        return $this->hasMany(AccountWarning::class);
+    }
+
+    /**
+     * @return HasMany<Diagnosis, $this>
+     */
+    public function diagnoses(): HasMany
+    {
+        return $this->hasMany(Diagnosis::class);
     }
 
     /**

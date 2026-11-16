@@ -87,6 +87,12 @@ return [
     // The "Untuk Teknisi" button in the customer header. Hidden for now; the portal stays reachable at /mitra/masuk.
     'show_technician_entry' => (bool) env('SEJUK_SHOW_TECHNICIAN_ENTRY', false),
 
+    // WhatsApp number of the Sejuk selection team (62xxxxxxxxxx). Technicians contact it during selection.
+    'admin_whatsapp' => env('SEJUK_ADMIN_WHATSAPP', '6281234567890'),
+
+    // New technicians are watched closely for their first orders (selection stage 7: masa percobaan).
+    'probation_orders' => 5,
+
     /*
     |--------------------------------------------------------------------------
     | Reference Data
@@ -96,7 +102,5 @@ return [
     'brands' => ['Daikin', 'Panasonic', 'Sharp', 'LG', 'Samsung', 'Gree', 'Polytron', 'Midea', 'Aqua', 'Lainnya'],
 
     'hero_image' => 'https://images.unsplash.com/photo-1642749776312-aa42ce20c9f5?auto=format&fit=crop&w=1600&q=75',
-
-    'areas' => ['Lowokwaru', 'Klojen', 'Blimbing', 'Sukun', 'Kedungkandang', 'Dinoyo', 'Sawojajar', 'Tlogomas', 'Batu', 'Singosari'],
 
 ];

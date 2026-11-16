@@ -5,6 +5,8 @@ use App\Enums\DocumentType;
 use App\Enums\VerificationStatus;
 use App\Models\TechnicianDocument;
 use App\Models\TechnicianProfile;
+use App\Support\TechnicianSelection;
+use Carbon\CarbonImmutable;
 use Flux\Flux;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -33,6 +35,8 @@ new #[Layout('layouts::customer'), Title('Menunggu verifikasi')] class extends C
     public string $reference_phone = '';
 
     public string $experience_description = '';
+
+    public bool $agreesToPartnership = false;
 
     public function mount(): void
     {
@@ -185,44 +189,32 @@ new #[Layout('layouts::customer'), Title('Menunggu verifikasi')] class extends C
         // Invalidate Livewire computed cache agar tampilan langsung ter-refresh dengan data baru
         unset($this->profile);
         unset($this->hasCertificate);
-        unset($this->steps);
 
         $this->isEditing = false;
         $this->reset(['ktp', 'certificate', 'experience_years', 'reference_phone', 'experience_description']);
         Flux::toast(variant: 'success', text: 'Data verifikasi berhasil dikirim ulang dan sedang ditinjau kembali oleh tim Sejuk.');
     }
 
-    /**
-     * The three verification steps and whether each is finished.
-     *
-     * @return list<array{title: string, detail: string, done: bool}>
-     */
     #[Computed]
-    public function steps(): array
+    public function selection(): ?TechnicianSelection
     {
-        $documents = $this->profile?->documents ?? collect();
-        $ktpDone = $documents->contains(function ($document) {
-            $typeVal = $document->type instanceof DocumentType ? $document->type->value : (string) $document->type;
-            $statusVal = $document->status instanceof DocumentStatus ? $document->status->value : (string) $document->status;
+        return $this->profile === null ? null : TechnicianSelection::for($this->profile);
+    }
 
-            return $typeVal === 'ktp' && $statusVal === 'approved';
-        });
+    /**
+     * The applicant accepts the partnership agreement after the orientation call (selection stage 6).
+     */
+    public function acceptAgreement(): void
+    {
+        $this->validate(['agreesToPartnership' => ['accepted']], ['agreesToPartnership.accepted' => 'Centang persetujuan perjanjian kemitraan terlebih dahulu.']);
 
-        $hasCert = $this->hasCertificate;
-        $competencyReviewed = $hasCert
-            ? $documents->contains(function ($document) {
-                $typeVal = $document->type instanceof DocumentType ? $document->type->value : (string) $document->type;
-                $statusVal = $document->status instanceof DocumentStatus ? $document->status->value : (string) $document->status;
+        $profile = $this->profile;
+        abort_if($profile === null || $profile->verification_status !== VerificationStatus::Pending, 403);
 
-                return $typeVal === 'sertifikat' && $statusVal !== 'pending';
-            })
-            : ($this->profile?->verification_status === VerificationStatus::Approved);
+        $profile->update(['agreement_accepted_at' => now()]);
+        unset($this->profile, $this->selection);
 
-        return [
-            ['title' => 'Identitas', 'detail' => 'KTP diperiksa', 'done' => $ktpDone],
-            ['title' => 'Kompetensi', 'detail' => $hasCert ? 'Sertifikat ditinjau' : 'Video call alat kerja', 'done' => $competencyReviewed],
-            ['title' => 'Aktivasi', 'detail' => 'Profil dipublikasikan', 'done' => false],
-        ];
+        Flux::toast(variant: 'success', text: 'Perjanjian kemitraan disetujui. Tim Sejuk akan segera mengaktifkan akunmu.');
     }
 }; ?>
 
@@ -254,7 +246,7 @@ new #[Layout('layouts::customer'), Title('Menunggu verifikasi')] class extends C
 
                 <div class="mt-7 flex flex-wrap justify-center gap-3">
                     <x-button class="cursor-pointer" wire:click="startEditing" icon="pencil-square">
-                        Perbaiki Dokumen & Ajukan Ulang
+                        Perbaiki Dokumen & Ajukan Banding
                     </x-button>
                     <form method="POST" action="{{ route('logout') }}">
                         @csrf
@@ -343,16 +335,82 @@ new #[Layout('layouts::customer'), Title('Menunggu verifikasi')] class extends C
                 </div>
             @endif
 
-            <div class="mt-7 grid gap-3 text-left sm:grid-cols-3">
-                @foreach ($this->steps as $index => $step)
-                    <div wire:key="step-{{ $index }}" class="rounded-2xl bg-paper p-4">
-                        <span @class(['grid size-7 place-items-center rounded-full text-xs font-bold ring-1', 'bg-leaf text-white ring-leaf' => $step['done'], 'bg-white text-ice ring-line' => ! $step['done']])>
-                            @if ($step['done']) <flux:icon.check class="size-3.5" /> @else {{ $index + 1 }} @endif
-                        </span>
-                        <p class="mt-3 font-bold">{{ $step['title'] }}</p>
-                        <p class="mt-1 text-xs text-mute">{{ $step['detail'] }}</p>
+            @php
+                $selection = $this->selection;
+                $currentStage = $selection->currentStage();
+            @endphp
+            <div class="mt-8 text-left">
+                <div class="flex flex-wrap items-end justify-between gap-3">
+                    <div>
+                        <p class="text-lg font-bold">Tahapan seleksi</p>
+                        <p class="text-sm text-mute">Selain pemeriksaan dokumen, seleksi dilakukan lewat WhatsApp dengan tim Sejuk.</p>
                     </div>
-                @endforeach
+                    <x-pill tone="sun">{{ $selection->passedCount() }}/{{ count($selection->stages()) }} selesai</x-pill>
+                </div>
+
+                <ol class="mt-5 space-y-3">
+                    @foreach ($selection->stages() as $key => $stage)
+                        @php
+                            $result = $selection->result($key);
+                            $isCurrent = $key === $currentStage;
+                        @endphp
+                        <li wire:key="stage-{{ $key }}" @class(['rounded-2xl p-4 ring-1', 'bg-leaf-soft/40 ring-leaf/20' => $result, 'bg-frost/50 ring-ice/40' => $isCurrent, 'bg-paper ring-transparent' => ! $result && ! $isCurrent])>
+                            <div class="flex items-start gap-3">
+                                <span @class(['grid size-7 shrink-0 place-items-center rounded-full text-xs font-bold ring-1', 'bg-leaf text-white ring-leaf' => $result, 'bg-ice text-white ring-ice' => $isCurrent, 'bg-white text-mute ring-line' => ! $result && ! $isCurrent])>
+                                    @if ($result) <flux:icon.check class="size-3.5" /> @else {{ $loop->iteration }} @endif
+                                </span>
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex flex-wrap items-center justify-between gap-2">
+                                        <p class="font-bold">{{ $stage['title'] }}</p>
+                                        <span class="text-xs font-semibold {{ $result ? 'text-leaf' : ($isCurrent ? 'text-ice-deep' : 'text-mute') }}">
+                                            {{ $result ? ($selection->isSkipped($key) ? 'Tidak diperlukan' : 'Lolos '.CarbonImmutable::parse($result['passed_at'])->translatedFormat('j M')) : ($isCurrent ? 'Tahap sekarang' : 'Menunggu') }}
+                                        </span>
+                                    </div>
+                                    <p class="text-xs text-mute">{{ $stage['channel'] }}{{ ! $result && $selection->canSkip($key) ? ' · bisa tidak diperlukan karena kamu punya sertifikat' : '' }}</p>
+                                    <p class="mt-1.5 text-sm text-ink-soft">{{ $stage['summary'] }}</p>
+                                    @if ($isCurrent || ! $result)
+                                        <details class="mt-2 text-sm" @if ($isCurrent) open @endif>
+                                            <summary class="cursor-pointer text-xs font-semibold text-ice">Apa yang dilakukan?</summary>
+                                            <ul class="mt-2 list-inside list-disc space-y-1 text-ink-soft">
+                                                @foreach ($stage['steps'] as $step)
+                                                    <li wire:key="step-{{ $key }}-{{ $loop->index }}">{{ $step }}</li>
+                                                @endforeach
+                                            </ul>
+                                            <p class="mt-2 text-xs text-mute">Lulus jika: {{ $stage['passes'] }}</p>
+                                        </details>
+                                    @endif
+                                </div>
+                            </div>
+                        </li>
+                    @endforeach
+
+                    <li @class(['rounded-2xl p-4 ring-1', 'bg-leaf-soft/40 ring-leaf/20' => $this->profile->agreement_accepted_at, 'bg-frost/50 ring-ice/40' => ! $this->profile->agreement_accepted_at && $currentStage === null, 'bg-paper ring-transparent' => ! $this->profile->agreement_accepted_at && $currentStage !== null])>
+                        <p class="font-bold">Persetujuan perjanjian kemitraan</p>
+                        @if ($this->profile->agreement_accepted_at)
+                            <p class="mt-1 text-sm text-leaf">Disetujui {{ $this->profile->agreement_accepted_at->translatedFormat('j F Y, H.i') }}. Akunmu tinggal diaktifkan tim Sejuk.</p>
+                        @else
+                            <p class="mt-1 text-sm text-ink-soft">Baca <a href="{{ route('pages.partnership') }}" target="_blank" class="font-semibold text-ice hover:underline">perjanjian kemitraan</a>, lalu setujui setelah orientasi lewat WhatsApp.</p>
+                            <label class="mt-3 flex items-start gap-2 text-sm">
+                                <input type="checkbox" wire:model="agreesToPartnership" class="mt-0.5 size-4 accent-ice" />
+                                <span>Saya sudah mengikuti orientasi dan menyetujui perjanjian kemitraan Sejuk, termasuk pembayaran hanya lewat Sejuk.</span>
+                            </label>
+                            @error('agreesToPartnership') <p class="mt-1.5 text-xs font-medium text-coral">{{ $message }}</p> @enderror
+                            <x-button size="sm" class="mt-3" icon="check" wire:click="acceptAgreement">Setujui perjanjian</x-button>
+                        @endif
+                    </li>
+
+                    <li class="rounded-2xl bg-paper p-4">
+                        <p class="font-bold">Aktif & masa percobaan</p>
+                        <p class="mt-1 text-sm text-ink-soft">Setelah diaktifkan, profilmu tampil di pencarian. {{ config('sejuk.probation_orders') }} pesanan pertama dipantau tim Sejuk untuk memastikan kualitas layanan.</p>
+                    </li>
+                </ol>
+
+                <div class="mt-6 flex flex-col items-start gap-3 rounded-2xl bg-leaf-soft/50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <p class="text-sm text-ink-soft">Tim seleksi akan menghubungi <strong class="text-ink">{{ auth()->user()->phone }}</strong>. Ada pertanyaan atau ingin mengatur jadwal?</p>
+                    <a href="{{ $selection->technicianMessageUrl() }}" target="_blank" rel="noopener" class="inline-flex shrink-0 items-center gap-2 rounded-full bg-leaf px-4 py-2 text-sm font-bold text-white hover:opacity-95">
+                        <flux:icon.message-circle class="size-4" /> Chat tim seleksi
+                    </a>
+                </div>
             </div>
 
             <div class="mt-8 flex flex-wrap justify-center gap-3">

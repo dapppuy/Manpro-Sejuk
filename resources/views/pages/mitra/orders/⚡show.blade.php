@@ -15,6 +15,8 @@ use Livewire\Component;
 new #[Layout('layouts::mitra')] class extends Component {
     public Order $order;
 
+    public int $etaMinutes = 30;
+
     public function mount(Order $order): void
     {
         Gate::authorize('view', $order);
@@ -62,11 +64,39 @@ new #[Layout('layouts::mitra')] class extends Component {
         $this->redirectRoute('mitra.orders.index', navigate: true);
     }
 
+    public function startTrip(OrderWorkflow $workflow): void
+    {
+        Gate::authorize('view', $this->order);
+        $this->validate(['etaMinutes' => ['required', 'integer', 'in:15,30,45,60,90']]);
+
+        $this->runTechnicianStep(fn () => $workflow->startTrip($this->order, auth()->user()->technicianProfile, $this->etaMinutes), 'Pelanggan diberi tahu bahwa kamu sedang menuju lokasi.');
+    }
+
+    public function markArrived(OrderWorkflow $workflow): void
+    {
+        Gate::authorize('view', $this->order);
+
+        $this->runTechnicianStep(fn () => $workflow->markArrived($this->order, auth()->user()->technicianProfile), 'Pelanggan diberi tahu bahwa kamu sudah tiba. Periksa AC lalu kirim biaya final.');
+    }
+
+    private function runTechnicianStep(\Closure $step, string $successMessage): void
+    {
+        try {
+            $step();
+        } catch (InvalidOrderTransition $exception) {
+            Flux::toast(variant: 'danger', text: $exception->getMessage());
+
+            return;
+        }
+
+        Flux::toast(variant: 'success', text: $successMessage);
+    }
+
     public function render(): \Illuminate\Contracts\View\View
     {
         $this->order->refresh();
         app(OrderWorkflow::class)->expireIfOverdue($this->order);
-        $this->order->load(['service', 'customer', 'media', 'costItems', 'workProofs', 'customerUnit']);
+        $this->order->load(['service', 'customer', 'media', 'costItems', 'workProofs', 'customerUnit', 'diagnosis']);
 
         return $this->view()->title('Pesanan #'.$this->order->code);
     }
@@ -79,7 +109,7 @@ new #[Layout('layouts::mitra')] class extends Component {
     $date = $order->scheduled_date ?? $order->preferred_date;
     $window = $order->scheduled_window ?? $order->time_window;
     $activeStatuses = [
-        OrderStatus::Terjadwal, OrderStatus::MenungguPersetujuanBiaya, OrderStatus::MenungguPembayaran, OrderStatus::Dikerjakan,
+        OrderStatus::Terjadwal, OrderStatus::DalamPerjalanan, OrderStatus::Pemeriksaan, OrderStatus::MenungguPersetujuanBiaya, OrderStatus::MenungguPembayaran, OrderStatus::Dikerjakan,
         OrderStatus::PerbaikanUlang, OrderStatus::MenungguKonfirmasi, OrderStatus::Sengketa, OrderStatus::Selesai,
     ];
 @endphp
@@ -117,16 +147,21 @@ new #[Layout('layouts::mitra')] class extends Component {
                 </div>
             @elseif ($this->isMine && in_array($status, $activeStatuses, true))
                 @php
-                    $finalSent = $order->final_total !== null && $status !== OrderStatus::Terjadwal;
+                    $beforeFinalCost = in_array($status, [OrderStatus::Terjadwal, OrderStatus::DalamPerjalanan, OrderStatus::Pemeriksaan], true);
+                    $finalSent = $order->final_total !== null && ! $beforeFinalCost;
                     $timeline = [
                         ['Penawaran diterima', 'Estimasi '.rupiah($order->estimate_min).'–'.rupiah($order->estimate_max), true],
-                        ['Kunjungan teknisi', $date->translatedFormat('l, j F').', '.$window->range().' WIB', $finalSent],
+                        ['Kunjungan teknisi', match (true) {
+                            $order->arrived_at !== null => 'Tiba '.$order->arrived_at->translatedFormat('j M, H.i'),
+                            $order->trip_started_at !== null => 'Berangkat '.$order->trip_started_at->translatedFormat('H.i').($order->trip_eta_minutes ? ' · perkiraan tiba '.$order->trip_started_at->addMinutes($order->trip_eta_minutes)->format('H.i') : ''),
+                            default => $date->translatedFormat('l, j F').', '.$window->range().' WIB',
+                        }, $finalSent || $order->arrived_at !== null],
                         ['Biaya final', match ($status) {
-                            OrderStatus::Terjadwal => 'Isi setelah pemeriksaan',
+                            OrderStatus::Terjadwal, OrderStatus::DalamPerjalanan, OrderStatus::Pemeriksaan => 'Isi setelah pemeriksaan',
                             OrderStatus::MenungguPersetujuanBiaya => rupiah($order->final_total).' · menunggu persetujuan pelanggan',
                             OrderStatus::MenungguPembayaran => rupiah($order->final_total).' · disetujui pelanggan',
                             default => rupiah($order->final_total).' · dibayar, dana ditahan Sejuk',
-                        }, ! in_array($status, [OrderStatus::Terjadwal, OrderStatus::MenungguPersetujuanBiaya], true)],
+                        }, ! $beforeFinalCost && $status !== OrderStatus::MenungguPersetujuanBiaya],
                         ['Bukti kerja', match ($status) {
                             OrderStatus::Dikerjakan => 'Pembayaran diterima, kerjakan lalu unggah bukti',
                             OrderStatus::PerbaikanUlang => 'Pelanggan meminta perbaikan ulang ke-'.$order->rework_count.', tanpa biaya tambahan',
@@ -213,6 +248,10 @@ new #[Layout('layouts::mitra')] class extends Component {
                 </dl>
             </x-card>
 
+            @if ($order->diagnosis)
+                <x-order.diagnosis :diagnosis="$order->diagnosis" />
+            @endif
+
             @if ($order->customerUnit)
                 @php $unitHistory = $order->customerUnit->completedServiceLogs()->with('technician.technicianProfile')->limit(3)->get(); @endphp
                 <x-card class="p-5 sm:p-6">
@@ -246,7 +285,7 @@ new #[Layout('layouts::mitra')] class extends Component {
                     <flux:icon.map-pin class="mt-0.5 size-4 shrink-0 text-ice" />
                     {{ $order->fullAddress() }}
                 </p>
-                @if ($order->latitude && $order->longitude && $this->isMine && in_array($status, [OrderStatus::Terjadwal], true))
+                @if ($order->latitude && $order->longitude && $this->isMine && in_array($status, [OrderStatus::Terjadwal, OrderStatus::DalamPerjalanan], true))
                     <a href="https://www.google.com/maps/search/?api=1&query={{ $order->latitude }},{{ $order->longitude }}" target="_blank" rel="noopener" class="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-ice">Buka di peta <flux:icon.external-link class="size-3.5" /></a>
                 @endif
             </x-card>
@@ -289,6 +328,19 @@ new #[Layout('layouts::mitra')] class extends Component {
                         <x-button size="lg" class="w-full" icon="camera" :href="route('mitra.orders.proof', $order)" wire:navigate>Upload Bukti Kerja</x-button>
                     @endif
                     @if ($status === OrderStatus::Terjadwal)
+                        <div class="rounded-2xl bg-paper p-3">
+                            <label for="eta" class="text-xs font-semibold text-ink-soft">Perkiraan sampai</label>
+                            <select id="eta" wire:model="etaMinutes" class="mt-1 w-full rounded-xl border-0 bg-white px-3 py-2 text-sm ring-1 ring-line">
+                                @foreach ([15, 30, 45, 60, 90] as $minutes)
+                                    <option value="{{ $minutes }}">± {{ $minutes }} menit lagi</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <x-button size="lg" class="w-full" icon="navigation" wire:click="startTrip" wire:loading.attr="disabled">Berangkat ke lokasi</x-button>
+                        <x-button variant="secondary" class="w-full" icon="map-pin" wire:click="markArrived" wire:loading.attr="disabled">Sudah sampai</x-button>
+                    @elseif ($status === OrderStatus::DalamPerjalanan)
+                        <x-button size="lg" class="w-full" icon="map-pin" wire:click="markArrived" wire:loading.attr="disabled">Sudah sampai, mulai periksa</x-button>
+                    @elseif ($status === OrderStatus::Pemeriksaan)
                         <x-button size="lg" class="w-full" icon="receipt-text" :href="route('mitra.orders.final-cost', $order)" wire:navigate>Input Biaya Final</x-button>
                     @elseif ($status === OrderStatus::MenungguPersetujuanBiaya)
                         <x-button variant="secondary" class="w-full" icon="pencil" :href="route('mitra.orders.final-cost', $order)" wire:navigate>Ubah biaya final</x-button>

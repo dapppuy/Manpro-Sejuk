@@ -2,6 +2,7 @@
 
 use App\Enums\TechnicianBadge;
 use App\Enums\VerificationStatus;
+use App\Models\AuditLog;
 use App\Models\TechnicianProfile;
 use Flux\Flux;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -43,6 +44,7 @@ new #[Layout('layouts::admin'), Title('Teknisi')] class extends Component {
     {
         $technician = TechnicianProfile::findOrFail($technicianId);
         $technician->update(['badge' => TechnicianBadge::tryFrom($badge) ?? abort(422)]);
+        AuditLog::record('technician.badge_changed', "Badge {$technician->business_name} diubah menjadi {$technician->badge->label()}", $technician);
 
         Flux::toast(text: "Badge {$technician->business_name} diubah.");
     }
@@ -51,6 +53,7 @@ new #[Layout('layouts::admin'), Title('Teknisi')] class extends Component {
     {
         $technician = TechnicianProfile::findOrFail($technicianId);
         $technician->update(['is_active' => ! $technician->is_active]);
+        AuditLog::record('technician.active_toggled', $technician->business_name.($technician->is_active ? ' diaktifkan' : ' dinonaktifkan'), $technician);
 
         Flux::toast(text: $technician->business_name.($technician->is_active ? ' diaktifkan.' : ' dinonaktifkan.'));
     }

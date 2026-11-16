@@ -130,7 +130,7 @@ new #[Layout('layouts::mitra'), Title('Harga acuan')] class extends Component {
         @foreach ($this->services as $service)
             @php $servicePrices = $this->prices->where('service_id', $service->id); @endphp
             <x-card wire:key="service-{{ $service->id }}" class="p-5 sm:p-6">
-                <x-section-title :icon="$service->icon()" :title="$service->name" :description="$servicePrices->isEmpty() ? 'Belum ada harga. Tambahkan minimal satu baris.' : $servicePrices->count().' baris harga'" />
+                <x-section-title :icon="$service->icon()" :title="$service->name" :description="($servicePrices->isEmpty() ? 'Belum ada harga. Tambahkan minimal satu baris.' : $servicePrices->count().' baris harga').($service->priceRangeLabel() ? ' · Acuan Sejuk: '.$service->priceRangeLabel() : '')" />
 
                 <div class="mt-5 space-y-3">
                     @foreach ($servicePrices as $price)

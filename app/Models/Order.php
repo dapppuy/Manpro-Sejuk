@@ -44,6 +44,9 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property string|null $estimate_note
  * @property CarbonImmutable|null $scheduled_date
  * @property TimeWindow|null $scheduled_window
+ * @property CarbonImmutable|null $trip_started_at
+ * @property int|null $trip_eta_minutes
+ * @property CarbonImmutable|null $arrived_at
  * @property int|null $final_total
  * @property int|null $commission_amount
  * @property OrderStatus $status
@@ -72,7 +75,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 #[Fillable([
     'customer_id', 'technician_id', 'service_id', 'ac_capacity', 'ac_brand', 'ac_brand_other', 'address',
     'address_detail', 'latitude', 'longitude', 'preferred_date', 'time_window', 'notes', 'warranty', 'warranty_fee',
-    'estimate_min', 'estimate_max', 'estimate_note', 'scheduled_date', 'scheduled_window', 'final_total',
+    'estimate_min', 'estimate_max', 'estimate_note', 'scheduled_date', 'scheduled_window', 'trip_started_at', 'trip_eta_minutes', 'arrived_at', 'final_total',
     'commission_amount', 'final_cost_submitted_at', 'reminded_day_before_at', 'reminded_hour_before_at', 'status', 'fund_status', 'payout_id', 'response_deadline', 'proof_submitted_at', 'rework_count',
     'cancelled_reason', 'completed_at', 'customer_unit_id', 'diagnosis_id',
 ])]
@@ -118,6 +121,8 @@ class Order extends Model
             'fund_status' => FundStatus::class,
             'response_deadline' => 'datetime',
             'final_cost_submitted_at' => 'datetime',
+            'trip_started_at' => 'datetime',
+            'arrived_at' => 'datetime',
             'reminded_day_before_at' => 'datetime',
             'reminded_hour_before_at' => 'datetime',
             'proof_submitted_at' => 'datetime',

@@ -14,7 +14,7 @@ beforeEach(function () {
     Storage::fake('local');
 
     $this->admin = User::factory()->admin()->create();
-    $this->technician = TechnicianProfile::factory()->pending()->create(['business_name' => 'Calon Mitra AC']);
+    $this->technician = TechnicianProfile::factory()->pending()->selectionCompleted()->create(['business_name' => 'Calon Mitra AC']);
     $this->ktp = $this->technician->documents()->create([
         'type' => DocumentType::Ktp,
         'path' => UploadedFile::fake()->create('ktp.jpg', 120, 'image/jpeg')->store('technician-documents', 'local'),

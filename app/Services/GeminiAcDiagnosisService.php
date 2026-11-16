@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Diagnosis;
+use App\Models\Service;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -39,7 +40,7 @@ class GeminiAcDiagnosisService
             ."Aturan wajib:\n"
             ."1. Hasil ini adalah PERKIRAAN AWAL untuk membantu pelanggan memahami kemungkinan gangguan dan memberi konteks ke teknisi, BUKAN pengganti pemeriksaan fisik teknisi.\n"
             ."2. Jika foto stiker spesifikasi dilampirkan, ekstrak merek, kapasitas PK, dan tipe refrigeran/freon. Jika tidak ada foto stiker, isi dengan 'Tidak terdeteksi' atau gunakan data unit tersimpan.\n"
-            ."3. Pilih kategori layanan yang paling sesuai dari salah satu slug berikut: 'cuci-ac', 'perbaikan', 'bongkar-pasang', atau 'servis-berkala'.\n"
+            .'3. Pilih kategori layanan yang paling sesuai dari salah satu slug berikut: '.$this->serviceChoices().".\n"
             ."4. Gunakan bahasa Indonesia yang jelas, ringkas, dan mudah dipahami orang awam.\n\n"
             ."Keluhan Pelanggan: {$complaintText}\n";
 
@@ -167,6 +168,23 @@ class GeminiAcDiagnosisService
     }
 
     /**
+     * Service categories the AI may recommend: the platform's own service slugs, so search and the request form can use them.
+     *
+     * @return array<string, string> slug => name
+     */
+    private function serviceSlugs(): array
+    {
+        $services = Service::orderBy('sort_order')->pluck('name', 'slug')->all();
+
+        return $services === [] ? ['perbaikan' => 'Perbaikan'] : $services;
+    }
+
+    private function serviceChoices(): string
+    {
+        return collect($this->serviceSlugs())->map(fn (string $name, string $slug) => "'{$slug}' ({$name})")->implode(', ');
+    }
+
+    /**
      * @param  list<array<string, mixed>>  $parts
      * @return array<string, mixed>
      */
@@ -212,7 +230,7 @@ class GeminiAcDiagnosisService
                     ],
                     'recommended_service_slug' => [
                         'type' => 'STRING',
-                        'enum' => ['cuci-ac', 'perbaikan', 'bongkar-pasang', 'servis-berkala'],
+                        'enum' => array_keys($this->serviceSlugs()),
                     ],
                     'preliminary_advice' => [
                         'type' => 'STRING',

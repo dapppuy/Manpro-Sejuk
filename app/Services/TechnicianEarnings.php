@@ -48,7 +48,7 @@ class TechnicianEarnings
     public function workload(TechnicianProfile $technician): array
     {
         $statuses = $technician->orders()->whereIn('status', OrderStatus::active())->pluck('status');
-        $needsAction = [OrderStatus::MenungguRespons, OrderStatus::Terjadwal, OrderStatus::Dikerjakan, OrderStatus::PerbaikanUlang];
+        $needsAction = [OrderStatus::MenungguRespons, OrderStatus::Terjadwal, OrderStatus::DalamPerjalanan, OrderStatus::Pemeriksaan, OrderStatus::Dikerjakan, OrderStatus::PerbaikanUlang];
 
         return [
             'active' => $statuses->filter(fn (OrderStatus $status) => $status !== OrderStatus::CariCadangan)->count(),
